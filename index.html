@@ -1,0 +1,536 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<title>家計簿 · 個人記帳</title>
+<meta name="theme-color" content="#F8F6EE">
+<link rel="manifest" href="manifest.json">
+<link rel="icon" href="icon.svg" type="image/svg+xml">
+<link rel="apple-touch-icon" href="icon.svg">
+<style>
+:root{
+  --washi: #F8F6EE;
+  --washi-deep: #EFE4CF;
+  --ink: #2B2820;
+  --ink-soft: #6B6558;
+  --matcha: #7A8F5C;
+  --matcha-deep: #566B32;
+  --matcha-pale: #DCE5CC;
+  --persimmon: #C17A4D;
+  --persimmon-deep: #A45F35;
+  --persimmon-pale: #F1DCC8;
+  --line: #DDD5C0;
+  --card: #FFFEFB;
+  --shadow: 0 1px 2px rgba(43,40,32,0.06), 0 4px 16px rgba(43,40,32,0.05);
+  --radius: 14px;
+}
+
+*{box-sizing:border-box; margin:0; padding:0;}
+
+body{
+  font-family: "Noto Sans TC", "Hiragino Sans", "PingFang TC", -apple-system, BlinkMacSystemFont, sans-serif;
+  background: var(--washi);
+  color: var(--ink);
+  min-height: 100vh;
+  min-height: 100dvh;
+  -webkit-font-smoothing: antialiased;
+}
+
+/* ---------- Top App Bar ---------- */
+.appbar{
+  position: sticky;
+  top: 0;
+  z-index: 20;
+  background: var(--washi);
+  border-bottom: 1px solid var(--line);
+  padding: env(safe-area-inset-top) 0 0 0;
+}
+.appbar-inner{
+  display:flex;
+  align-items:center;
+  justify-content:space-between;
+  padding: 14px 18px 12px;
+  gap: 12px;
+}
+.brand{
+  display:flex;
+  align-items:baseline;
+  gap: 8px;
+}
+.brand-mark{
+  font-size: 1.05rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+}
+.brand-sub{
+  font-size: 0.68rem;
+  color: var(--ink-soft);
+  letter-spacing: 0.08em;
+}
+.month-select{
+  position: relative;
+  display:flex;
+  align-items:center;
+}
+.month-select select{
+  appearance: none;
+  -webkit-appearance: none;
+  background: var(--card);
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  padding: 7px 30px 7px 12px;
+  font-size: 0.92rem;
+  font-weight: 600;
+  color: var(--ink);
+  font-family: inherit;
+}
+.month-select::after{
+  content: "";
+  position: absolute;
+  right: 11px;
+  pointer-events: none;
+  width: 8px; height: 8px;
+  border-right: 2px solid var(--ink-soft);
+  border-bottom: 2px solid var(--ink-soft);
+  transform: rotate(45deg) translateY(-3px);
+}
+
+/* ---------- Tabs ---------- */
+.tabs{
+  display:flex;
+  padding: 0 18px;
+  gap: 4px;
+  background: var(--washi);
+}
+.tab{
+  flex:1;
+  text-align:center;
+  padding: 10px 0 12px;
+  font-size: 0.9rem;
+  font-weight: 600;
+  color: var(--ink-soft);
+  border-bottom: 2.5px solid transparent;
+  cursor:pointer;
+  user-select:none;
+  transition: color 0.15s;
+}
+.tab.active{
+  color: var(--ink);
+  border-bottom-color: var(--matcha-deep);
+}
+
+.view{ display:none; padding: 16px 16px 100px; max-width: 640px; margin: 0 auto; }
+.view.active{ display:block; }
+
+/* ---------- Loading / Empty ---------- */
+.status-msg{
+  text-align:center;
+  padding: 60px 20px;
+  color: var(--ink-soft);
+  font-size: 0.9rem;
+  line-height:1.7;
+}
+.status-msg .icon{ font-size: 2rem; display:block; margin-bottom: 10px; }
+.btn{
+  display:inline-flex;
+  align-items:center;
+  gap:6px;
+  background: var(--matcha-deep);
+  color: #fff;
+  border:none;
+  border-radius: 10px;
+  padding: 11px 22px;
+  font-size: 0.92rem;
+  font-weight:600;
+  font-family:inherit;
+  cursor:pointer;
+  margin-top: 14px;
+}
+.btn:active{ transform: scale(0.98); }
+.btn.ghost{
+  background: transparent;
+  border: 1px solid var(--line);
+  color: var(--ink);
+}
+
+/* ---------- Pie/Donut View ---------- */
+.mode-toggle{
+  display:flex;
+  background: var(--washi-deep);
+  border-radius: 12px;
+  padding: 4px;
+  margin-bottom: 18px;
+}
+.mode-btn{
+  flex:1;
+  text-align:center;
+  padding: 9px 0;
+  border-radius: 9px;
+  font-size: 0.88rem;
+  font-weight:700;
+  color: var(--ink-soft);
+  cursor:pointer;
+  user-select:none;
+  transition: all 0.18s;
+}
+.mode-btn.active-expense{
+  background: var(--card);
+  color: var(--matcha-deep);
+  box-shadow: var(--shadow);
+}
+.mode-btn.active-income{
+  background: var(--card);
+  color: var(--persimmon-deep);
+  box-shadow: var(--shadow);
+}
+
+.donut-card{
+  background: var(--card);
+  border-radius: var(--radius);
+  padding: 24px 20px 20px;
+  box-shadow: var(--shadow);
+  margin-bottom: 18px;
+}
+.donut-wrap{
+  position: relative;
+  width: 220px;
+  height: 220px;
+  margin: 0 auto 4px;
+}
+.donut-center{
+  position:absolute;
+  top:50%; left:50%;
+  transform: translate(-50%,-50%);
+  text-align:center;
+  pointer-events:none;
+}
+.donut-center .label{
+  font-size: 0.78rem;
+  color: var(--ink-soft);
+  letter-spacing: 0.05em;
+}
+.donut-center .amount{
+  font-size: 1.5rem;
+  font-weight: 800;
+  margin-top: 2px;
+  font-variant-numeric: tabular-nums;
+}
+
+.legend{
+  margin-top: 18px;
+  display:flex;
+  flex-direction:column;
+  gap: 2px;
+}
+.legend-row{
+  display:flex;
+  align-items:center;
+  gap: 10px;
+  padding: 11px 4px;
+  border-bottom: 1px solid var(--line);
+  cursor:pointer;
+}
+.legend-row:last-child{ border-bottom:none; }
+.legend-dot{
+  width: 11px; height: 11px;
+  border-radius: 3px;
+  flex-shrink:0;
+}
+.legend-name{
+  flex:1;
+  font-size: 0.9rem;
+  font-weight: 600;
+}
+.legend-pct{
+  font-size: 0.75rem;
+  color: var(--ink-soft);
+  margin-right: 4px;
+}
+.legend-amount{
+  font-size: 0.9rem;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+.legend-chevron{
+  width: 6px; height:6px;
+  border-right: 1.5px solid var(--ink-soft);
+  border-bottom: 1.5px solid var(--ink-soft);
+  transform: rotate(-45deg);
+  margin-left: 2px;
+  opacity: 0.5;
+}
+
+/* ---------- Category Detail Sheet ---------- */
+.sheet-overlay{
+  position: fixed;
+  inset:0;
+  background: rgba(43,40,32,0.35);
+  z-index: 40;
+  opacity:0;
+  pointer-events:none;
+  transition: opacity 0.2s;
+}
+.sheet-overlay.open{ opacity:1; pointer-events:auto; }
+.sheet{
+  position: fixed;
+  left:0; right:0; bottom:0;
+  background: var(--washi);
+  border-radius: 20px 20px 0 0;
+  z-index: 41;
+  max-height: 82vh;
+  display:flex;
+  flex-direction:column;
+  transform: translateY(100%);
+  transition: transform 0.28s cubic-bezier(.32,.72,0,1);
+  padding-bottom: env(safe-area-inset-bottom);
+}
+.sheet.open{ transform: translateY(0); }
+.sheet-handle{
+  width: 36px; height:4px;
+  background: var(--line);
+  border-radius: 2px;
+  margin: 10px auto 6px;
+}
+.sheet-header{
+  display:flex;
+  align-items:center;
+  justify-content:space-between;
+  padding: 6px 20px 14px;
+  border-bottom: 1px solid var(--line);
+}
+.sheet-title{
+  display:flex;
+  align-items:center;
+  gap:8px;
+  font-size: 1.05rem;
+  font-weight:800;
+}
+.sheet-total{
+  font-size: 0.85rem;
+  color: var(--ink-soft);
+  font-variant-numeric: tabular-nums;
+}
+.sort-toggle{
+  display:flex;
+  gap:6px;
+  padding: 12px 20px 4px;
+}
+.sort-btn{
+  font-size: 0.78rem;
+  font-weight:600;
+  padding: 6px 13px;
+  border-radius: 8px;
+  background: var(--washi-deep);
+  color: var(--ink-soft);
+  cursor:pointer;
+  user-select:none;
+}
+.sort-btn.active{
+  background: var(--matcha-deep);
+  color: #fff;
+}
+.sheet-list{
+  overflow-y:auto;
+  padding: 6px 20px 24px;
+  flex:1;
+}
+.entry-row{
+  display:flex;
+  align-items:center;
+  justify-content:space-between;
+  padding: 12px 0;
+  border-bottom: 1px solid var(--line);
+}
+.entry-row:last-child{ border-bottom:none; }
+.entry-main{ flex:1; min-width:0; }
+.entry-name{
+  font-size: 0.92rem;
+  font-weight:600;
+}
+.entry-meta{
+  font-size: 0.75rem;
+  color: var(--ink-soft);
+  margin-top: 2px;
+}
+.entry-amount{
+  font-size: 0.95rem;
+  font-weight:700;
+  font-variant-numeric: tabular-nums;
+  white-space:nowrap;
+  margin-left: 12px;
+}
+
+/* ---------- Calendar View ---------- */
+.cal-summary{
+  display:flex;
+  justify-content:space-between;
+  background: var(--card);
+  border-radius: var(--radius);
+  padding: 16px 18px;
+  box-shadow: var(--shadow);
+  margin-bottom: 16px;
+}
+.cal-summary-item{ text-align:center; flex:1; }
+.cal-summary-label{
+  font-size: 0.72rem;
+  color: var(--ink-soft);
+  letter-spacing: 0.04em;
+}
+.cal-summary-value{
+  font-size: 1.1rem;
+  font-weight: 800;
+  margin-top: 4px;
+  font-variant-numeric: tabular-nums;
+}
+.cal-summary-value.expense{ color: var(--matcha-deep); }
+.cal-summary-value.income{ color: var(--persimmon-deep); }
+.cal-summary-divider{
+  width:1px;
+  background: var(--line);
+  margin: 2px 8px;
+}
+
+.cal-grid-card{
+  background: var(--card);
+  border-radius: var(--radius);
+  padding: 14px 10px 6px;
+  box-shadow: var(--shadow);
+  margin-bottom: 18px;
+}
+.cal-weekdays{
+  display:grid;
+  grid-template-columns: repeat(7, 1fr);
+  text-align:center;
+  font-size: 0.72rem;
+  color: var(--ink-soft);
+  font-weight:600;
+  margin-bottom: 6px;
+}
+.cal-weekdays div{ padding: 4px 0; }
+.cal-days{
+  display:grid;
+  grid-template-columns: repeat(7, 1fr);
+  gap: 3px;
+}
+.cal-day{
+  aspect-ratio: 1;
+  border-radius: 8px;
+  display:flex;
+  flex-direction:column;
+  align-items:center;
+  justify-content:center;
+  cursor:pointer;
+  position:relative;
+  padding: 2px;
+}
+.cal-day.empty{ cursor:default; }
+.cal-day.has-data{ background: var(--washi-deep); }
+.cal-day.selected{
+  background: var(--matcha-deep);
+}
+.cal-day.selected .cal-day-num, .cal-day.selected .cal-day-amt{ color:#fff; }
+.cal-day-num{
+  font-size: 0.78rem;
+  font-weight:700;
+}
+.cal-day-amt{
+  font-size: 0.55rem;
+  color: var(--matcha-deep);
+  font-weight:700;
+  margin-top: 1px;
+  line-height:1;
+}
+.cal-day.today .cal-day-num{
+  color: var(--persimmon-deep);
+}
+
+.day-detail-card{
+  background: var(--card);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow);
+  overflow:hidden;
+}
+.day-detail-header{
+  padding: 16px 18px 12px;
+  border-bottom: 1px solid var(--line);
+  display:flex;
+  align-items:baseline;
+  justify-content:space-between;
+}
+.day-detail-date{
+  font-size: 1rem;
+  font-weight:800;
+}
+.day-detail-net{
+  font-size: 0.85rem;
+  color: var(--ink-soft);
+  font-variant-numeric: tabular-nums;
+}
+.day-detail-list{ padding: 4px 18px 14px; }
+
+/* ---------- Toast / Sync info ---------- */
+.sync-bar{
+  display:flex;
+  align-items:center;
+  justify-content:center;
+  gap:6px;
+  font-size: 0.72rem;
+  color: var(--ink-soft);
+  padding: 8px 0 0;
+}
+.sync-dot{
+  width:6px;height:6px;
+  border-radius:50%;
+  background: var(--matcha);
+}
+
+::-webkit-scrollbar{ width:0; height:0; }
+</style>
+</head>
+<body>
+
+<div class="appbar">
+  <div class="appbar-inner">
+    <div class="brand">
+      <span class="brand-mark">家計簿</span>
+      <span class="brand-sub">個人記帳</span>
+    </div>
+    <div class="month-select">
+      <select id="monthSelect"></select>
+    </div>
+  </div>
+  <div class="tabs">
+    <div class="tab active" data-view="pie">圖表</div>
+    <div class="tab" data-view="calendar">日曆</div>
+  </div>
+</div>
+
+<!-- PIE VIEW -->
+<div class="view active" id="view-pie">
+  <div id="pieContent"></div>
+</div>
+
+<!-- CALENDAR VIEW -->
+<div class="view" id="view-calendar">
+  <div id="calendarContent"></div>
+</div>
+
+<!-- Category detail bottom sheet -->
+<div class="sheet-overlay" id="sheetOverlay"></div>
+<div class="sheet" id="sheet">
+  <div class="sheet-handle"></div>
+  <div class="sheet-header">
+    <div class="sheet-title" id="sheetTitle"></div>
+    <div class="sheet-total" id="sheetTotal"></div>
+  </div>
+  <div class="sort-toggle">
+    <div class="sort-btn active" data-sort="date">依日期</div>
+    <div class="sort-btn" data-sort="amount">依金額</div>
+  </div>
+  <div class="sheet-list" id="sheetList"></div>
+</div>
+
+<script src="app.js"></script>
+</body>
+</html>

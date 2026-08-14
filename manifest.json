@@ -1,0 +1,18 @@
+{
+  "name": "家計簿 · 個人記帳",
+  "short_name": "家計簿",
+  "description": "讀取 Google Sheet 記帳資料，以圖表與日曆呈現收支狀況",
+  "start_url": ".",
+  "display": "standalone",
+  "background_color": "#F8F6EE",
+  "theme_color": "#F8F6EE",
+  "orientation": "portrait",
+  "icons": [
+    {
+      "src": "icon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    }
+  ]
+}
