@@ -10,27 +10,36 @@ const CONFIG = {
   SCOPES: "https://www.googleapis.com/auth/spreadsheets.readonly",
 };
 
-// Category color mapping — matcha family for expense, persimmon family for income
+// Category color mapping — matcha family for expense, persimmon family for income.
+// Expense order is deliberately interleaved (not spectrum-sequential) so that
+// adjacent donut slices never sit next to a close neighbor in hue/lightness —
+// e.g. 若竹色 and 水浅葱 (both mid-toned green-teals) are kept apart.
 const EXPENSE_COLORS = {
-  "餐飲": "#7A8F5C",
-  "日用": "#A3B387",
-  "育兒": "#566B32",
-  "交通": "#C8D2B4",
-  "醫療": "#8FA876",
-  "娛樂": "#95A87A",
-  "學習": "#B7C29E",
-  "其他": "#D9DFC9",
+  "餐飲": "#7A8F5C",   // 抹茶色 — matcha
+  "日用": "#4D8FAC",   // 空色 — sky blue
+  "育兒": "#7A942E",   // 鶸萌黄 — yellow-green
+  "交通": "#89729E",   // 藤色 — wisteria purple
+  "醫療": "#6B9362",   // 若竹色 — young bamboo green
+  "娛樂": "#48929B",   // 浅葱色 — teal blue
+  "學習": "#3D5D42",   // 木賊色 — deep green-teal
+  "其他": "#749F8D",   // 水浅葱 — pale blue-green
 };
+const EXPENSE_ORDER = ["餐飲","日用","育兒","交通","醫療","娛樂","學習","其他"];
+
 const INCOME_COLORS = {
-  "投資": "#C17A4D",
-  "薪資": "#D4956B",
-  "其他": "#E8C4A3",
+  "投資": "#934337",   // 柿渋色 — deep persimmon-brown (primary)
+  "薪資": "#C17A4D",   // 柿子橙 — original persimmon
+  "其他": "#F08F90",   // 一斤染 — pale pink
 };
+const INCOME_ORDER = ["投資","薪資","其他"];
+
 function colorFor(cat, type){
   const map = type === "支出" ? EXPENSE_COLORS : INCOME_COLORS;
   if (map[cat]) return map[cat];
-  // fallback deterministic color
-  const fallback = type === "支出" ? ["#7A8F5C","#A3B387","#566B32","#8FA876"] : ["#C17A4D","#D4956B","#E8C4A3"];
+  // fallback deterministic color for categories not in the fixed palette
+  const fallback = type === "支出"
+    ? ["#7A8F5C","#4D8FAC","#7A942E","#89729E","#6B9362","#48929B","#3D5D42","#749F8D"]
+    : ["#934337","#C17A4D","#F08F90"];
   let hash = 0;
   for (const ch of cat) hash = (hash * 31 + ch.charCodeAt(0)) % fallback.length;
   return fallback[hash];
@@ -332,9 +341,21 @@ function renderPieView(){
     byCat[r.category] = (byCat[r.category] || 0) + r.amount;
     total += r.amount;
   });
-  const cats = Object.entries(byCat).sort((a, b) => b[1] - a[1]);
 
-  const gradient = buildConicGradient(cats, total, currentMode);
+  // Donut ring order: fixed palette order (not by amount) so adjacent slices
+  // are never two categories that happen to sit next to each other in hue —
+  // this is what keeps contrast reliable regardless of which categories are
+  // biggest in a given month.
+  const fixedOrder = currentMode === "支出" ? EXPENSE_ORDER : INCOME_ORDER;
+  const presentCats = Object.keys(byCat);
+  const ringCats = fixedOrder
+    .filter(c => presentCats.includes(c))
+    .concat(presentCats.filter(c => !fixedOrder.includes(c))) // any custom categories go last
+    .map(c => [c, byCat[c]]);
+
+  // Legend order: by amount descending — most useful for scanning "where did the money go".
+  const legendCats = Object.entries(byCat).sort((a, b) => b[1] - a[1]);
+
   const themeColor = currentMode === "支出" ? "var(--matcha-deep)" : "var(--persimmon-deep)";
 
   let html = `
@@ -346,7 +367,7 @@ function renderPieView(){
       <div class="donut-wrap">
         <svg width="220" height="220" viewBox="0 0 220 220">
           <circle cx="110" cy="110" r="80" fill="none" stroke="#EFE4CF" stroke-width="30"/>
-          ${buildDonutSegments(cats, total)}
+          ${buildDonutSegments(ringCats, total)}
         </svg>
         <div class="donut-center">
           <div class="label">${currentMode}</div>
@@ -354,7 +375,7 @@ function renderPieView(){
         </div>
       </div>
       <div class="legend">
-        ${cats.map(([cat, amt]) => {
+        ${legendCats.map(([cat, amt]) => {
           const pct = ((amt / total) * 100).toFixed(1);
           return `
           <div class="legend-row" data-cat="${escapeAttr(cat)}">
@@ -385,21 +406,26 @@ function bindModeToggle(){
   });
 }
 
+// Draws the donut ring with a visible gap between segments (background shows
+// through), matching the reference screenshot rather than solid touching
+// wedges. Each segment is inset by a fixed arc-length gap on both sides and
+// given a round cap, so the gap reads as a soft sliver rather than a hard cut.
 function buildDonutSegments(cats, total){
   const r = 80, cx = 110, cy = 110, circumference = 2 * Math.PI * r;
+  const gapPx = 5; // arc length of the gap on each side of a segment, in px along the ring
   let offset = 0;
   return cats.map(([cat, amt]) => {
     const frac = amt / total;
-    const len = frac * circumference;
+    const fullLen = frac * circumference;
+    const len = Math.max(fullLen - gapPx, 0.001); // shrink to leave a gap; avoid zero-length arcs
+    const inset = (fullLen - len) / 2;
     const seg = `<circle cx="${cx}" cy="${cy}" r="${r}" fill="none" stroke="${colorFor(cat, currentMode)}"
       stroke-width="30" stroke-dasharray="${len} ${circumference - len}"
-      stroke-dashoffset="${-offset}" transform="rotate(-90 ${cx} ${cy})" stroke-linecap="butt"/>`;
-    offset += len;
+      stroke-dashoffset="${-(offset + inset)}" transform="rotate(-90 ${cx} ${cy})" stroke-linecap="round"/>`;
+    offset += fullLen;
     return seg;
   }).join("");
 }
-
-function buildConicGradient(){ return ""; } // unused, kept for potential fallback
 
 // ---------- Category Detail Sheet ----------
 function openCategorySheet(category){
