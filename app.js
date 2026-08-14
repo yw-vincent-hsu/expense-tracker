@@ -407,12 +407,16 @@ function bindModeToggle(){
 }
 
 // Draws the donut ring with a visible gap between segments (background shows
-// through), matching the reference screenshot rather than solid touching
-// wedges. Each segment is inset by a fixed arc-length gap on both sides and
-// given a round cap, so the gap reads as a soft sliver rather than a hard cut.
+// through), matching the reference screenshot. Uses butt caps with a fixed
+// angular gap rather than round caps — round caps add a radius-sized bulge at
+// each segment end (half the stroke width), which overwhelms the intended gap
+// when there are few segments or an extreme size ratio between them (e.g. two
+// categories near 50/50), making the "gap" disappear or ballooning into a
+// large rounded lump. A fixed angular gap stays a consistent, correct width
+// regardless of segment count or proportion.
 function buildDonutSegments(cats, total){
   const r = 80, cx = 110, cy = 110, circumference = 2 * Math.PI * r;
-  const gapPx = 5; // arc length of the gap on each side of a segment, in px along the ring
+  const gapPx = 4; // visual gap width along the ring, in px — constant regardless of segment size
   let offset = 0;
   return cats.map(([cat, amt]) => {
     const frac = amt / total;
@@ -421,7 +425,7 @@ function buildDonutSegments(cats, total){
     const inset = (fullLen - len) / 2;
     const seg = `<circle cx="${cx}" cy="${cy}" r="${r}" fill="none" stroke="${colorFor(cat, currentMode)}"
       stroke-width="30" stroke-dasharray="${len} ${circumference - len}"
-      stroke-dashoffset="${-(offset + inset)}" transform="rotate(-90 ${cx} ${cy})" stroke-linecap="round"/>`;
+      stroke-dashoffset="${-(offset + inset)}" transform="rotate(-90 ${cx} ${cy})" stroke-linecap="butt"/>`;
     offset += fullLen;
     return seg;
   }).join("");
