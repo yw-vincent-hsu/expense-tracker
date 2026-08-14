@@ -43,6 +43,35 @@ let currentMonth = null; // "2026-08"
 let currentMode = "支出"; // pie mode: 支出 / 收入
 let currentSort = "date";
 let calSelectedDate = null;
+let pollTimer = null;
+let lastSheetSignature = null; // used to detect real changes silently
+
+const TOKEN_STORAGE_KEY = "kakeibo_token";
+const POLL_INTERVAL_MS = 60 * 1000; // check for sheet updates every 60s while app is open
+
+// ---------- Token persistence ----------
+function saveToken(token, expiresInSec){
+  const expiresAt = Date.now() + expiresInSec * 1000;
+  localStorage.setItem(TOKEN_STORAGE_KEY, JSON.stringify({ token, expiresAt }));
+}
+function loadStoredToken(){
+  try {
+    const raw = localStorage.getItem(TOKEN_STORAGE_KEY);
+    if (!raw) return null;
+    const { token, expiresAt } = JSON.parse(raw);
+    // leave a 60s safety margin before actual expiry
+    if (Date.now() > expiresAt - 60 * 1000) {
+      localStorage.removeItem(TOKEN_STORAGE_KEY);
+      return null;
+    }
+    return token;
+  } catch {
+    return null;
+  }
+}
+function clearStoredToken(){
+  localStorage.removeItem(TOKEN_STORAGE_KEY);
+}
 
 // ---------- Boot ----------
 window.onload = () => {
@@ -52,6 +81,11 @@ window.onload = () => {
   if ("serviceWorker" in navigator) {
     navigator.serviceWorker.register("sw.js").catch(() => {});
   }
+  document.addEventListener("visibilitychange", () => {
+    if (document.visibilityState === "visible" && accessToken) {
+      fetchSheetData(true); // silent refresh when user comes back to the tab
+    }
+  });
 };
 
 function bindTabs(){
@@ -83,10 +117,22 @@ function initGoogleAuth(){
           return;
         }
         accessToken = resp.access_token;
+        saveToken(resp.access_token, resp.expires_in || 3600);
         fetchSheetData();
+        startPolling();
       },
     });
-    promptSignIn();
+
+    // Try to reuse a still-valid token from a previous session first —
+    // this is what avoids re-prompting on every reload within the ~1hr window.
+    const stored = loadStoredToken();
+    if (stored) {
+      accessToken = stored;
+      fetchSheetData();
+      startPolling();
+    } else {
+      promptSignIn();
+    }
   };
   document.head.appendChild(gsiScript);
 }
@@ -121,28 +167,81 @@ function renderStatus(elId, kind, msg, showRetry){
 }
 
 // ---------- Fetch & Parse Sheet ----------
-async function fetchSheetData(){
-  renderStatus("pieContent", "loading", "讀取記帳資料中…");
+// silent=true is used for background polling / visibility-refresh: it never
+// shows a loading spinner and never wipes the screen on failure, so a flaky
+// network blip in the background doesn't disrupt whatever the user is looking at.
+async function fetchSheetData(silent){
+  if (!silent) {
+    renderStatus("pieContent", "loading", "讀取記帳資料中…");
+  }
   try {
     const url = `https://sheets.googleapis.com/v4/spreadsheets/${CONFIG.SPREADSHEET_ID}/values/${CONFIG.RANGE}`;
     const res = await fetch(url, {
       headers: { Authorization: `Bearer ${accessToken}` },
     });
+    if (res.status === 401) {
+      // token expired or was revoked — drop it and ask the user to sign in again.
+      // Even in silent mode we still surface the prompt here (rather than staying
+      // quiet), because a session that's silently gone stale with no way for the
+      // user to notice is worse than one unprompted screen change.
+      clearStoredToken();
+      accessToken = null;
+      stopPolling();
+      renderConnectPrompt();
+      return;
+    }
     if (!res.ok) throw new Error("HTTP " + res.status);
     const data = await res.json();
-    rawRows = parseRows(data.values || []);
+    const values = data.values || [];
+
+    // Cheap signature to detect whether anything actually changed before
+    // re-rendering — avoids the UI silently jumping/resetting scroll position
+    // every 60s when Gemini Spark hasn't written anything new.
+    const signature = JSON.stringify(values);
+    const changed = signature !== lastSheetSignature;
+    lastSheetSignature = signature;
+
+    if (!changed && silent) return;
+
+    rawRows = parseRows(values);
     if (rawRows.length === 0) {
       renderStatus("pieContent", "empty", "目前沒有記帳資料");
       renderStatus("calendarContent", "empty", "目前沒有記帳資料");
       return;
     }
-    setupMonthSelector();
+    setupMonthSelector(currentMonth);
     renderAll();
+
+    // if the category detail sheet is open, refresh it too so it doesn't show stale numbers
+    const sheetEl = document.getElementById("sheet");
+    if (sheetEl.classList.contains("open")) {
+      const category = document.getElementById("sheetTitle").textContent.trim();
+      const rows = rawRows.filter(r => r.month === currentMonth && r.type === currentMode && r.category === category);
+      renderSheetList(rows);
+    }
   } catch (err) {
     console.error(err);
-    renderStatus("pieContent", "error", "讀取失敗，請確認網路連線或重新授權", true);
-    renderStatus("calendarContent", "error", "讀取失敗，請確認網路連線或重新授權", true);
+    if (!silent) {
+      renderStatus("pieContent", "error", "讀取失敗，請確認網路連線或重新授權", true);
+      renderStatus("calendarContent", "error", "讀取失敗，請確認網路連線或重新授權", true);
+    }
   }
+}
+
+// ---------- Silent background polling ----------
+// Checks Google Sheets periodically while the tab is open/visible so entries
+// added via Gemini Spark show up without the user having to manually reload.
+function startPolling(){
+  stopPolling();
+  pollTimer = setInterval(() => {
+    if (document.visibilityState === "visible" && accessToken) {
+      fetchSheetData(true);
+    }
+  }, POLL_INTERVAL_MS);
+}
+function stopPolling(){
+  if (pollTimer) clearInterval(pollTimer);
+  pollTimer = null;
 }
 
 function parseRows(values){
@@ -179,20 +278,31 @@ function parseRows(values){
 }
 
 // ---------- Month Selector ----------
-function setupMonthSelector(){
+// preferredMonth: pass the currently-viewed month (e.g. during a silent
+// background refresh) so polling doesn't yank the user back to the latest
+// month while they're looking at an older one. Pass null on first load to
+// default to the most recent month.
+function setupMonthSelector(preferredMonth){
   const months = [...new Set(rawRows.map(r => r.month))].sort().reverse();
   const sel = document.getElementById("monthSelect");
+  const isFirstBuild = !sel.dataset.bound;
+
   sel.innerHTML = months.map(m => {
     const [y, mo] = m.split("-");
     return `<option value="${m}">${y}年${parseInt(mo)}月</option>`;
   }).join("");
-  currentMonth = months[0];
+
+  currentMonth = (preferredMonth && months.includes(preferredMonth)) ? preferredMonth : months[0];
   sel.value = currentMonth;
-  sel.addEventListener("change", () => {
-    currentMonth = sel.value;
-    calSelectedDate = null;
-    renderAll();
-  });
+
+  if (isFirstBuild) {
+    sel.dataset.bound = "1";
+    sel.addEventListener("change", () => {
+      currentMonth = sel.value;
+      calSelectedDate = null;
+      renderAll();
+    });
+  }
 }
 
 function renderAll(){
