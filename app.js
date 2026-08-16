@@ -95,15 +95,23 @@ window.onload = () => {
 };
 
 function bindTabs(){
+  const indicator = document.getElementById("tabsIndicator");
+  const moveIndicator = (tabEl) => {
+    indicator.style.width = tabEl.offsetWidth + "px";
+    indicator.style.transform = `translateX(${tabEl.offsetLeft}px)`;
+  };
   document.querySelectorAll(".tab").forEach(tab => {
     tab.addEventListener("click", () => {
       document.querySelectorAll(".tab").forEach(t => t.classList.remove("active"));
       tab.classList.add("active");
+      moveIndicator(tab);
       const target = tab.dataset.view;
       document.querySelectorAll(".view").forEach(v => v.classList.remove("active"));
       document.getElementById("view-" + target).classList.add("active");
     });
   });
+  moveIndicator(document.querySelector(".tab.active"));
+  window.addEventListener("resize", () => moveIndicator(document.querySelector(".tab.active")));
 }
 
 // ---------- Google OAuth ----------
@@ -318,76 +326,108 @@ function renderAll(){
 
 // ================= PIE VIEW =================
 function renderPieView(){
-  const monthRows = rawRows.filter(r => r.month === currentMonth && r.type === currentMode);
   const container = document.getElementById("pieContent");
-
-  if (monthRows.length === 0) {
+  if (!document.getElementById("modeToggle")) {
     container.innerHTML = `
       <div class="mode-toggle" id="modeToggle">
-        <div class="mode-btn ${currentMode==='支出'?'active-expense':''}" data-mode="支出">支出</div>
-        <div class="mode-btn ${currentMode==='收入'?'active-income':''}" data-mode="收入">收入</div>
+        <div class="mode-toggle-indicator" id="modeIndicator"></div>
+        <div class="mode-btn" data-mode="支出">支出</div>
+        <div class="mode-btn" data-mode="收入">收入</div>
       </div>
-      <div class="status-msg"><span class="icon">🗒️</span>這個月還沒有${currentMode}紀錄</div>`;
+      <div id="pieBody"></div>
+    `;
     bindModeToggle();
-    return;
   }
+  updateModeToggleUI();
+  renderPieBody();
+}
 
-  const byCat = {};
-  let total = 0;
-  monthRows.forEach(r => {
-    byCat[r.category] = (byCat[r.category] || 0) + r.amount;
-    total += r.amount;
+function updateModeToggleUI(){
+  document.querySelectorAll("#modeToggle .mode-btn").forEach(btn => {
+    const isActive = btn.dataset.mode === currentMode;
+    btn.classList.toggle("active-expense", isActive && currentMode === "支出");
+    btn.classList.toggle("active-income", isActive && currentMode === "收入");
   });
+  document.getElementById("modeIndicator").classList.toggle("income", currentMode === "收入");
+}
 
-  // Single amount-descending order drives both the ring and the legend now —
-  // color is assigned by rank (biggest category = first/deepest palette color),
-  // so ring and legend always agree on which color means which category.
-  const sortedCats = Object.entries(byCat).sort((a, b) => b[1] - a[1]);
-  const themeColor = colorForRank(0, currentMode); // center number matches the largest category's color
+// Fades the donut/legend body out, repaints it for the current month+mode,
+// then fades it back in — skipped on the very first paint so initial load
+// isn't delayed waiting on a transition with nothing to cross-fade from.
+function renderPieBody(){
+  const body = document.getElementById("pieBody");
+  const isFirstPaint = !body.innerHTML.trim();
 
-  let html = `
-    <div class="mode-toggle" id="modeToggle">
-      <div class="mode-btn ${currentMode==='支出'?'active-expense':''}" data-mode="支出">支出</div>
-      <div class="mode-btn ${currentMode==='收入'?'active-income':''}" data-mode="收入">收入</div>
-    </div>
-    <div class="donut-card">
-      <div class="donut-wrap">
-        <svg width="220" height="220" viewBox="0 0 220 220">
-          ${buildDonutSegments(sortedCats, total)}
-        </svg>
-        <div class="donut-center">
-          <div class="label">${currentMode}</div>
-          <div class="amount" style="color:${themeColor}">${formatMoney(total)}</div>
+  const paint = () => {
+    const monthRows = rawRows.filter(r => r.month === currentMonth && r.type === currentMode);
+
+    if (monthRows.length === 0) {
+      body.innerHTML = `<div class="status-msg"><span class="icon">🗒️</span>這個月還沒有${currentMode}紀錄</div>`;
+      return;
+    }
+
+    const byCat = {};
+    let total = 0;
+    monthRows.forEach(r => {
+      byCat[r.category] = (byCat[r.category] || 0) + r.amount;
+      total += r.amount;
+    });
+
+    // Single amount-descending order drives both the ring and the legend now —
+    // color is assigned by rank (biggest category = first/deepest palette color),
+    // so ring and legend always agree on which color means which category.
+    const sortedCats = Object.entries(byCat).sort((a, b) => b[1] - a[1]);
+    const themeColor = colorForRank(0, currentMode); // center number matches the largest category's color
+
+    body.innerHTML = `
+      <div class="donut-card">
+        <div class="donut-wrap">
+          <svg width="220" height="220" viewBox="0 0 220 220">
+            ${buildDonutSegments(sortedCats, total)}
+          </svg>
+          <div class="donut-center">
+            <div class="label">${currentMode}</div>
+            <div class="amount" style="color:${themeColor}">${formatMoney(total)}</div>
+          </div>
+        </div>
+        <div class="legend">
+          ${sortedCats.map(([cat, amt], i) => {
+            const pct = ((amt / total) * 100).toFixed(1);
+            return `
+            <div class="legend-row" data-cat="${escapeAttr(cat)}" data-rank="${i}">
+              <div class="legend-dot" style="background:${colorForRank(i, currentMode)}"></div>
+              <div class="legend-name">${cat}</div>
+              <div class="legend-pct">${pct}%</div>
+              <div class="legend-amount">${formatMoney(amt)}</div>
+              <div class="legend-chevron"></div>
+            </div>`;
+          }).join("")}
         </div>
       </div>
-      <div class="legend">
-        ${sortedCats.map(([cat, amt], i) => {
-          const pct = ((amt / total) * 100).toFixed(1);
-          return `
-          <div class="legend-row" data-cat="${escapeAttr(cat)}" data-rank="${i}">
-            <div class="legend-dot" style="background:${colorForRank(i, currentMode)}"></div>
-            <div class="legend-name">${cat}</div>
-            <div class="legend-pct">${pct}%</div>
-            <div class="legend-amount">${formatMoney(amt)}</div>
-            <div class="legend-chevron"></div>
-          </div>`;
-        }).join("")}
-      </div>
-    </div>
-  `;
-  container.innerHTML = html;
-  bindModeToggle();
+    `;
+    document.querySelectorAll(".legend-row").forEach(row => {
+      row.addEventListener("click", () => openCategorySheet(row.dataset.cat, parseInt(row.dataset.rank, 10)));
+    });
+  };
 
-  document.querySelectorAll(".legend-row").forEach(row => {
-    row.addEventListener("click", () => openCategorySheet(row.dataset.cat, parseInt(row.dataset.rank, 10)));
-  });
+  if (isFirstPaint) {
+    paint();
+    return;
+  }
+  body.classList.add("fade-out");
+  setTimeout(() => {
+    paint();
+    body.classList.remove("fade-out");
+  }, 150);
 }
 
 function bindModeToggle(){
   document.querySelectorAll("#modeToggle .mode-btn").forEach(btn => {
     btn.addEventListener("click", () => {
+      if (btn.dataset.mode === currentMode) return;
       currentMode = btn.dataset.mode;
-      renderPieView();
+      updateModeToggleUI();
+      renderPieBody();
     });
   });
 }

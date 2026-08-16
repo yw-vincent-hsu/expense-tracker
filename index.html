@@ -98,30 +98,56 @@ body{
 
 /* ---------- Tabs ---------- */
 .tabs{
+  position: relative;
   display:flex;
   padding: 0 18px;
   gap: 4px;
   background: var(--washi);
 }
+.tabs-indicator{
+  position:absolute;
+  bottom:0;
+  height: 2.5px;
+  background: var(--matcha-deep);
+  transition: transform 0.28s cubic-bezier(.32,.72,0,1), width 0.28s cubic-bezier(.32,.72,0,1);
+}
 .tab{
+  position:relative;
   flex:1;
   text-align:center;
   padding: 10px 0 12px;
   font-size: 0.9rem;
   font-weight: 600;
   color: var(--ink-soft);
-  border-bottom: 2.5px solid transparent;
   cursor:pointer;
   user-select:none;
-  transition: color 0.15s;
+  transition: color 0.2s;
 }
 .tab.active{
   color: var(--ink);
-  border-bottom-color: var(--matcha-deep);
 }
 
-.view{ display:none; padding: 16px 16px 100px; max-width: 640px; margin: 0 auto; }
-.view.active{ display:block; }
+.view-stack{ display:grid; }
+.view{
+  grid-row: 1;
+  grid-column: 1;
+  padding: 16px 16px 100px;
+  max-width: 640px;
+  width: 100%;
+  margin: 0 auto;
+  opacity: 0;
+  transform: translateY(8px);
+  visibility: hidden;
+  pointer-events: none;
+  transition: opacity 0.25s ease, transform 0.25s ease, visibility 0s linear 0.25s;
+}
+.view.active{
+  opacity: 1;
+  transform: translateY(0);
+  visibility: visible;
+  pointer-events: auto;
+  transition: opacity 0.25s ease, transform 0.25s ease;
+}
 
 /* ---------- Loading / Empty ---------- */
 .status-msg{
@@ -156,13 +182,29 @@ body{
 
 /* ---------- Pie/Donut View ---------- */
 .mode-toggle{
+  position: relative;
   display:flex;
   background: var(--washi-deep);
   border-radius: 12px;
   padding: 4px;
   margin-bottom: 18px;
 }
+.mode-toggle-indicator{
+  position:absolute;
+  top:4px; bottom:4px; left:4px;
+  width: calc(50% - 4px);
+  background: var(--card);
+  border-radius: 9px;
+  box-shadow: var(--shadow);
+  transition: transform 0.28s cubic-bezier(.32,.72,0,1);
+  z-index:0;
+}
+.mode-toggle-indicator.income{
+  transform: translateX(100%);
+}
 .mode-btn{
+  position:relative;
+  z-index:1;
   flex:1;
   text-align:center;
   padding: 9px 0;
@@ -172,18 +214,13 @@ body{
   color: var(--ink-soft);
   cursor:pointer;
   user-select:none;
-  transition: all 0.18s;
+  transition: color 0.18s;
 }
-.mode-btn.active-expense{
-  background: var(--card);
-  color: var(--matcha-deep);
-  box-shadow: var(--shadow);
-}
-.mode-btn.active-income{
-  background: var(--card);
-  color: var(--persimmon-deep);
-  box-shadow: var(--shadow);
-}
+.mode-btn.active-expense{ color: var(--matcha-deep); }
+.mode-btn.active-income{ color: var(--persimmon-deep); }
+
+#pieBody{ transition: opacity 0.15s ease; }
+#pieBody.fade-out{ opacity: 0; }
 
 .donut-card{
   background: var(--card);
@@ -500,20 +537,23 @@ body{
       <select id="monthSelect"></select>
     </div>
   </div>
-  <div class="tabs">
+  <div class="tabs" id="tabs">
+    <div class="tabs-indicator" id="tabsIndicator"></div>
     <div class="tab active" data-view="pie">圖表</div>
     <div class="tab" data-view="calendar">日曆</div>
   </div>
 </div>
 
-<!-- PIE VIEW -->
-<div class="view active" id="view-pie">
-  <div id="pieContent"></div>
-</div>
+<div class="view-stack">
+  <!-- PIE VIEW -->
+  <div class="view active" id="view-pie">
+    <div id="pieContent"></div>
+  </div>
 
-<!-- CALENDAR VIEW -->
-<div class="view" id="view-calendar">
-  <div id="calendarContent"></div>
+  <!-- CALENDAR VIEW -->
+  <div class="view" id="view-calendar">
+    <div id="calendarContent"></div>
+  </div>
 </div>
 
 <!-- Category detail bottom sheet -->
