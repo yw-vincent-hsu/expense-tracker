@@ -396,8 +396,10 @@ function renderPieBody(){
             return `
             <div class="legend-row" data-cat="${escapeAttr(cat)}" data-rank="${i}">
               <div class="legend-dot" style="background:${colorForRank(i, currentMode)}"></div>
-              <div class="legend-name">${cat}</div>
-              <div class="legend-pct">${pct}%</div>
+              <div class="legend-label">
+                <div class="legend-name">${cat}</div>
+                <div class="legend-pct">${pct}%</div>
+              </div>
               <div class="legend-amount">${formatMoney(amt)}</div>
               <div class="legend-chevron"></div>
             </div>`;
@@ -497,10 +499,48 @@ function bindSheet(){
       renderSheetList(rows);
     });
   });
+  bindSheetDrag();
 }
 function closeSheet(){
   document.getElementById("sheetOverlay").classList.remove("open");
   document.getElementById("sheet").classList.remove("open");
+}
+
+// Lets the user pull the sheet down by its handle to dismiss it, mirroring
+// native iOS bottom-sheet behavior. Pointer Events unify touch and mouse so
+// the same code path works for on-device testing in a desktop browser too.
+function bindSheetDrag(){
+  const sheet = document.getElementById("sheet");
+  const dragHandle = document.getElementById("sheetDragHandle");
+  let startY = 0;
+  let dragY = 0;
+  let dragging = false;
+
+  dragHandle.addEventListener("pointerdown", (e) => {
+    dragging = true;
+    startY = e.clientY;
+    dragY = 0;
+    sheet.style.transition = "none";
+    dragHandle.setPointerCapture(e.pointerId);
+  });
+  dragHandle.addEventListener("pointermove", (e) => {
+    if (!dragging) return;
+    dragY = Math.max(0, e.clientY - startY);
+    sheet.style.transform = `translateY(${dragY}px)`;
+  });
+  const endDrag = () => {
+    if (!dragging) return;
+    dragging = false;
+    sheet.style.transition = "";
+    sheet.style.transform = "";
+    // Dismiss once dragged past a quarter of the sheet's own height (or a
+    // flat 120px for very short sheets) — otherwise snap back open.
+    if (dragY > sheet.offsetHeight * 0.25 || dragY > 120) {
+      closeSheet();
+    }
+  };
+  dragHandle.addEventListener("pointerup", endDrag);
+  dragHandle.addEventListener("pointercancel", endDrag);
 }
 
 // ================= CALENDAR VIEW =================
@@ -524,7 +564,11 @@ function renderCalendarView(){
   const daysInMonth = new Date(y, m, 0).getDate();
   const startWeekday = (firstDay.getDay() + 6) % 7; // Monday = 0
 
-  const todayStr = new Date().toISOString().slice(0, 10);
+  // Local calendar date, not UTC — toISOString() reports UTC, which still
+  // reads as "yesterday" in UTC+8 until 08:00 local time and made the
+  // today-marker fall a day behind.
+  const now = new Date();
+  const todayStr = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-${String(now.getDate()).padStart(2, "0")}`;
 
   let cells = "";
   for (let i = 0; i < startWeekday; i++) cells += `<div class="cal-day empty"></div>`;
@@ -534,8 +578,11 @@ function renderCalendarView(){
     const isToday = dateStr === todayStr;
     const isSelected = dateStr === calSelectedDate;
     let amtHtml = "";
-    if (info && info.expense > 0) amtHtml = `<div class="cal-day-amt">-${formatCompact(info.expense)}</div>`;
-    else if (info && info.income > 0) amtHtml = `<div class="cal-day-amt" style="color:var(--persimmon-deep)">+${formatCompact(info.income)}</div>`;
+    if (info) {
+      const net = info.income - info.expense;
+      if (net > 0) amtHtml = `<div class="cal-day-amt" style="color:var(--persimmon-deep)">+${formatCompact(net)}</div>`;
+      else if (net < 0) amtHtml = `<div class="cal-day-amt">-${formatCompact(-net)}</div>`;
+    }
     cells += `
       <div class="cal-day ${info ? "has-data" : ""} ${isToday ? "today" : ""} ${isSelected ? "selected" : ""}" data-date="${dateStr}">
         <div class="cal-day-num">${d}</div>

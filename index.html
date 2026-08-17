@@ -100,8 +100,9 @@ body{
 .tabs{
   position: relative;
   display:flex;
+  justify-content: center;
   padding: 0 18px;
-  gap: 4px;
+  gap: 40px;
   background: var(--washi);
 }
 .tabs-indicator{
@@ -113,9 +114,8 @@ body{
 }
 .tab{
   position:relative;
-  flex:1;
   text-align:center;
-  padding: 10px 0 12px;
+  padding: 10px 4px 12px;
   font-size: 0.9rem;
   font-weight: 600;
   color: var(--ink-soft);
@@ -274,20 +274,31 @@ body{
   border-radius: 3px;
   flex-shrink:0;
 }
-.legend-name{
+.legend-label{
   flex:1;
+  min-width:0;
+  display:flex;
+  align-items:baseline;
+  gap: 6px;
+}
+.legend-name{
   font-size: 0.9rem;
   font-weight: 600;
+  white-space:nowrap;
+  overflow:hidden;
+  text-overflow:ellipsis;
 }
 .legend-pct{
   font-size: 0.75rem;
   color: var(--ink-soft);
-  margin-right: 4px;
+  flex-shrink:0;
 }
 .legend-amount{
   font-size: 0.9rem;
   font-weight: 700;
   font-variant-numeric: tabular-nums;
+  white-space:nowrap;
+  margin-left: 12px;
 }
 .legend-chevron{
   width: 6px; height:6px;
@@ -316,6 +327,7 @@ body{
   border-radius: 20px 20px 0 0;
   z-index: 41;
   max-height: 82vh;
+  min-height: 60vh;
   display:flex;
   flex-direction:column;
   transform: translateY(100%);
@@ -323,11 +335,17 @@ body{
   padding-bottom: env(safe-area-inset-bottom);
 }
 .sheet.open{ transform: translateY(0); }
+.sheet-drag-handle{
+  display:flex;
+  justify-content:center;
+  padding: 12px 0 14px;
+  touch-action: none;
+  cursor: grab;
+}
 .sheet-handle{
   width: 36px; height:4px;
   background: var(--line);
   border-radius: 2px;
-  margin: 10px auto 6px;
 }
 .sheet-header{
   display:flex;
@@ -463,6 +481,9 @@ body{
 }
 .cal-day.empty{ cursor:default; }
 .cal-day.has-data{ background: var(--washi-deep); }
+.cal-day.today .cal-day-num{
+  color: var(--persimmon-deep);
+}
 .cal-day.selected{
   background: var(--matcha-deep);
 }
@@ -477,9 +498,6 @@ body{
   font-weight:700;
   margin-top: 1px;
   line-height:1;
-}
-.cal-day.today .cal-day-num{
-  color: var(--persimmon-deep);
 }
 
 .day-detail-card{
@@ -559,7 +577,9 @@ body{
 <!-- Category detail bottom sheet -->
 <div class="sheet-overlay" id="sheetOverlay"></div>
 <div class="sheet" id="sheet">
-  <div class="sheet-handle"></div>
+  <div class="sheet-drag-handle" id="sheetDragHandle">
+    <div class="sheet-handle"></div>
+  </div>
   <div class="sheet-header">
     <div class="sheet-title" id="sheetTitle"></div>
     <div class="sheet-total" id="sheetTotal"></div>
