@@ -100,9 +100,6 @@ body{
 .tabs{
   position: relative;
   display:flex;
-  justify-content: center;
-  padding: 0 18px;
-  gap: 40px;
   background: var(--washi);
 }
 .tabs-indicator{
@@ -114,8 +111,9 @@ body{
 }
 .tab{
   position:relative;
+  flex:1;
   text-align:center;
-  padding: 10px 4px 12px;
+  padding: 10px 0 12px;
   font-size: 0.9rem;
   font-weight: 600;
   color: var(--ink-soft);
@@ -292,6 +290,8 @@ body{
   font-size: 0.75rem;
   color: var(--ink-soft);
   flex-shrink:0;
+  min-width: 40px;
+  text-align:right;
 }
 .legend-amount{
   font-size: 0.9rem;
@@ -499,6 +499,7 @@ body{
   margin-top: 1px;
   line-height:1;
 }
+.cal-day-amt.positive{ color: var(--persimmon-deep); }
 
 .day-detail-card{
   background: var(--card);

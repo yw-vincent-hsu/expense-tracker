@@ -580,7 +580,7 @@ function renderCalendarView(){
     let amtHtml = "";
     if (info) {
       const net = info.income - info.expense;
-      if (net > 0) amtHtml = `<div class="cal-day-amt" style="color:var(--persimmon-deep)">+${formatCompact(net)}</div>`;
+      if (net > 0) amtHtml = `<div class="cal-day-amt positive">+${formatCompact(net)}</div>`;
       else if (net < 0) amtHtml = `<div class="cal-day-amt">-${formatCompact(-net)}</div>`;
     }
     cells += `
@@ -614,7 +614,6 @@ function renderCalendarView(){
     cell.addEventListener("click", () => {
       calSelectedDate = cell.dataset.date;
       renderCalendarView();
-      document.getElementById("dayDetail").scrollIntoView({ behavior: "smooth", block: "nearest" });
     });
   });
 
