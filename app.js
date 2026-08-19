@@ -17,11 +17,11 @@ const CONFIG = {
 // month simply take the first colors in the list.
 const EXPENSE_PALETTE = [
   "#6A8372", // 老竹
+  "#465D4C", // 御納戶茶
   "#36563C", // 千歲綠
   "#516E41", // 青丹
-  "#91AD70", // 柳染
-  "#5B622E", // 海松
-  "#838A2D", // 苔
+  "#7BA23F", // 萌黃
+  "#90B44B", // 鶸萌黃
   "#BEC23F", // 鶸
   "#DDD23B", // 女郎花
 ];
