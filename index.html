@@ -146,6 +146,10 @@ body{
   pointer-events: auto;
   transition: opacity 0.25s ease, transform 0.25s ease;
 }
+#view-pie{ padding-bottom: 58px; }
+/* Locks page scrolling while the 圖表 tab is active — its content is sized
+   to fit one screen instead, unlike the calendar view which stays scrollable. */
+body.pie-locked{ overflow: hidden; }
 
 /* ---------- Loading / Empty ---------- */
 .status-msg{
@@ -185,7 +189,7 @@ body{
   background: var(--washi-deep);
   border-radius: 12px;
   padding: 4px;
-  margin-bottom: 18px;
+  margin-bottom: 15px;
 }
 .mode-toggle-indicator{
   position:absolute;
@@ -223,14 +227,14 @@ body{
 .donut-card{
   background: var(--card);
   border-radius: var(--radius);
-  padding: 24px 20px 20px;
+  padding: 20px 19px 16px;
   box-shadow: var(--shadow);
-  margin-bottom: 18px;
+  margin-bottom: 15px;
 }
 .donut-wrap{
   position: relative;
-  width: 220px;
-  height: 220px;
+  width: 204px;
+  height: 204px;
   margin: 0 auto 4px;
 }
 .donut-center{
@@ -246,23 +250,23 @@ body{
   letter-spacing: 0.05em;
 }
 .donut-center .amount{
-  font-size: 1.5rem;
+  font-size: 1.43rem;
   font-weight: 800;
   margin-top: 2px;
   font-variant-numeric: tabular-nums;
 }
 
 .legend{
-  margin-top: 18px;
+  margin-top: 13px;
   display:flex;
   flex-direction:column;
-  gap: 2px;
+  gap: 0;
 }
 .legend-row{
   display:flex;
   align-items:center;
   gap: 10px;
-  padding: 11px 4px;
+  padding: 9px 4px;
   border-bottom: 1px solid var(--line);
   cursor:pointer;
 }

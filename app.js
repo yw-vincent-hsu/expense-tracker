@@ -108,9 +108,13 @@ function bindTabs(){
       const target = tab.dataset.view;
       document.querySelectorAll(".view").forEach(v => v.classList.remove("active"));
       document.getElementById("view-" + target).classList.add("active");
+      // The 圖表 tab is laid out to fit one screen with no scrolling; the
+      // 日曆 tab still needs to scroll for long day-detail lists.
+      document.body.classList.toggle("pie-locked", target === "pie");
     });
   });
   moveIndicator(document.querySelector(".tab.active"));
+  document.body.classList.toggle("pie-locked", document.querySelector(".tab.active").dataset.view === "pie");
   window.addEventListener("resize", () => moveIndicator(document.querySelector(".tab.active")));
 }
 
@@ -382,7 +386,7 @@ function renderPieBody(){
     body.innerHTML = `
       <div class="donut-card">
         <div class="donut-wrap">
-          <svg width="220" height="220" viewBox="0 0 220 220">
+          <svg width="100%" height="100%" viewBox="0 0 220 220">
             ${buildDonutSegments(sortedCats, total)}
           </svg>
           <div class="donut-center">
