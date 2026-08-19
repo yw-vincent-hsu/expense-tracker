@@ -16,14 +16,14 @@ const CONFIG = {
 // a fixed per-category mapping, since whichever categories are biggest this
 // month simply take the first colors in the list.
 const EXPENSE_PALETTE = [
-  "#465D4C", // 御納戸茶
-  "#4F726C", // 沈香茶
-  "#89916B", // 梅幸茶
-  "#B1B479", // 麹塵
-  "#A5A051", // 鶸茶
-  "#74673E", // 路考茶
-  "#897D55", // 利休茶
-  "#B4A582", // 利休白茶
+  "#6A8372", // 老竹
+  "#36563C", // 千歲綠
+  "#516E41", // 青丹
+  "#91AD70", // 柳染
+  "#5B622E", // 海松
+  "#838A2D", // 苔
+  "#BEC23F", // 鶸
+  "#DDD23B", // 女郎花
 ];
 const INCOME_PALETTE = [
   "#A35E47", // 柿渋
