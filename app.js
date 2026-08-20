@@ -16,19 +16,19 @@ const CONFIG = {
 // a fixed per-category mapping, since whichever categories are biggest this
 // month simply take the first colors in the list.
 const EXPENSE_PALETTE = [
+  "#6A8372", // 老竹
   "#465D4C", // 御納戸茶
-  "#4F726C", // 沈香茶
-  "#89916B", // 梅幸茶
-  "#B1B479", // 麹塵
-  "#A5A051", // 鶸茶
-  "#74673E", // 路考茶
-  "#897D55", // 利休茶
-  "#B4A582", // 利休白茶
+  "#36563C", // 千歳緑
+  "#516E41", // 青丹
+  "#7BA23F", // 萌黃
+  "#90B44B", // 鶸萌黃
+  "#BEC23F", // 鶸
+  "#DDD23B", // 女郎花
 ];
 const INCOME_PALETTE = [
-  "#A35E47", // 柿渋
+  "#B47157", // 唐茶
   "#E79460", // 洗柿
-  "#C46243", // 照柿
+  "#FFBA84", // 灑落柿
 ];
 
 function paletteFor(type){
@@ -468,6 +468,7 @@ function openCategorySheet(category, rank){
   document.getElementById("sheetTitle").innerHTML =
     `<span style="width:11px;height:11px;border-radius:3px;display:inline-block;background:${colorForRank(rank, currentMode)}"></span> ${category}`;
   document.getElementById("sheetTotal").textContent = `${rows.length} 筆 · ${formatMoney(total)}`;
+  document.querySelector(".sort-toggle").classList.toggle("income", currentMode === "收入");
 
   currentSort = "date";
   currentSortDir = "desc";
@@ -486,7 +487,7 @@ function updateSortButtons(){
     const isActive = btn.dataset.sort === currentSort;
     btn.classList.toggle("active", isActive);
     const label = btn.dataset.sort === "date" ? "依日期" : "依金額";
-    btn.textContent = isActive ? `${label} ${arrow}` : label;
+    btn.textContent = `${label} ${isActive ? arrow : "↓"}`;
   });
 }
 
@@ -656,7 +657,7 @@ function renderDayDetail(dateStr, info){
     <div class="day-detail-card">
       <div class="day-detail-header">
         <div class="day-detail-date">${formatDateFull(dateStr)}</div>
-        <div class="day-detail-net" style="color:${net >= 0 ? 'var(--persimmon-deep)' : 'var(--matcha-deep)'}">
+        <div class="day-detail-net" style="color:${net >= 0 ? 'var(--income-accent)' : 'var(--expense-accent)'}">
           ${net >= 0 ? "+" : ""}${formatMoney(net)}
         </div>
       </div>
@@ -667,7 +668,7 @@ function renderDayDetail(dateStr, info){
               <div class="entry-name">${r.name || "（未命名）"}</div>
               <div class="entry-meta">${r.category}${r.note ? " · " + r.note : ""}</div>
             </div>
-            <div class="entry-amount" style="color:${r.type==='支出' ? 'var(--ink)' : 'var(--persimmon-deep)'}">
+            <div class="entry-amount" style="color:${r.type==='支出' ? 'var(--ink)' : 'var(--income-accent)'}">
               ${r.type === "支出" ? "-" : "+"}${formatMoney(r.amount)}
             </div>
           </div>

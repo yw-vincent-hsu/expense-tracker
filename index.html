@@ -20,6 +20,8 @@
   --persimmon: #C17A4D;
   --persimmon-deep: #A45F35;
   --persimmon-pale: #F1DCC8;
+  --expense-accent: #6A8372; /* 老竹 — expense-specific text/number/button color */
+  --income-accent: #B47157;  /* 唐茶 — income-specific text/number/button color */
   --line: #DDD5C0;
   --card: #FFFEFB;
   --shadow: 0 1px 2px rgba(43,40,32,0.06), 0 4px 16px rgba(43,40,32,0.05);
@@ -218,8 +220,8 @@ body.pie-locked{ overflow: hidden; }
   user-select:none;
   transition: color 0.18s;
 }
-.mode-btn.active-expense{ color: var(--matcha-deep); }
-.mode-btn.active-income{ color: var(--persimmon-deep); }
+.mode-btn.active-expense{ color: var(--expense-accent); }
+.mode-btn.active-income{ color: var(--income-accent); }
 
 #pieBody{ transition: opacity 0.15s ease; }
 #pieBody.fade-out{ opacity: 0; }
@@ -386,8 +388,11 @@ body.pie-locked{ overflow: hidden; }
   user-select:none;
 }
 .sort-btn.active{
-  background: var(--matcha-deep);
+  background: var(--expense-accent);
   color: #fff;
+}
+.sort-toggle.income .sort-btn.active{
+  background: var(--income-accent);
 }
 .sheet-list{
   overflow-y:auto;
@@ -442,8 +447,8 @@ body.pie-locked{ overflow: hidden; }
   margin-top: 4px;
   font-variant-numeric: tabular-nums;
 }
-.cal-summary-value.expense{ color: var(--matcha-deep); }
-.cal-summary-value.income{ color: var(--persimmon-deep); }
+.cal-summary-value.expense{ color: var(--expense-accent); }
+.cal-summary-value.income{ color: var(--income-accent); }
 .cal-summary-divider{
   width:1px;
   background: var(--line);
@@ -498,12 +503,12 @@ body.pie-locked{ overflow: hidden; }
 }
 .cal-day-amt{
   font-size: 0.55rem;
-  color: var(--matcha-deep);
+  color: var(--expense-accent);
   font-weight:700;
   margin-top: 1px;
   line-height:1;
 }
-.cal-day-amt.positive{ color: var(--persimmon-deep); }
+.cal-day-amt.positive{ color: var(--income-accent); }
 
 .day-detail-card{
   background: var(--card);
