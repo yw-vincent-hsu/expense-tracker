@@ -307,8 +307,10 @@ function bindEntryForm(){
   });
   form.addEventListener("submit", (event) => {
     event.preventDefault();
+    const displayDate = document.getElementById("entryDate").value.trim();
+    const date = parseDisplayDate(displayDate);
     const entry = {
-      date: document.getElementById("entryDate").value,
+      date,
       type: document.getElementById("entryType").value,
       category: document.getElementById("entryCategory").value.trim(),
       name: document.getElementById("entryName").value.trim(),
@@ -316,7 +318,7 @@ function bindEntryForm(){
       note: document.getElementById("entryNote").value.trim(),
     };
     if (!entry.date || !entry.category || !entry.name || !Number.isFinite(entry.amount) || entry.amount <= 0) {
-      document.getElementById("entryError").textContent = "請完整填寫日期、分類、項目名稱與有效金額";
+      document.getElementById("entryError").textContent = "請填寫正確日期（例如 2026/8/21）、分類、項目名稱與有效金額";
       return;
     }
     submitEntry(entry);
@@ -326,7 +328,6 @@ function bindEntryForm(){
 function openEntrySheet(){
   resetEntryForm();
   document.getElementById("entryError").textContent = "";
-  document.getElementById("entrySyncStatus").textContent = accessToken ? "寫入 Google 試算表" : "請先連接 Google 帳號";
   document.getElementById("entryOverlay").classList.add("open");
   document.getElementById("entrySheet").classList.add("open");
 }
@@ -335,7 +336,7 @@ function resetEntryForm(){
   const form = document.getElementById("entryForm");
   if (form) form.reset();
   const today = new Date();
-  document.getElementById("entryDate").value = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, "0")}-${String(today.getDate()).padStart(2, "0")}`;
+  document.getElementById("entryDate").value = `${today.getFullYear()}/${today.getMonth() + 1}/${today.getDate()}`;
   document.getElementById("entryType").value = "支出";
   document.querySelectorAll("[data-entry-type]").forEach(btn => {
     btn.classList.toggle("active-expense", btn.dataset.entryType === "支出");
@@ -348,6 +349,17 @@ function updateEntryCategories(){
   const type = document.getElementById("entryType").value;
   const select = document.getElementById("entryCategory");
   select.innerHTML = `<option value="" disabled selected>請選擇分類</option>${ENTRY_CATEGORIES[type].map(category => `<option value="${category}">${category}</option>`).join("")}`;
+}
+
+function parseDisplayDate(value){
+  const match = /^(\d{4})\/(\d{1,2})\/(\d{1,2})$/.exec(value);
+  if (!match) return "";
+  const year = Number(match[1]);
+  const month = Number(match[2]);
+  const day = Number(match[3]);
+  const date = new Date(year, month - 1, day);
+  if (date.getFullYear() !== year || date.getMonth() !== month - 1 || date.getDate() !== day) return "";
+  return `${year}-${String(month).padStart(2, "0")}-${String(day).padStart(2, "0")}`;
 }
 
 function closeEntrySheet(){
@@ -858,7 +870,7 @@ function formatDateShort(dateStr){
 function formatDateFull(dateStr){
   const [y, m, d] = dateStr.split("-");
   const weekday = "日一二三四五六"[new Date(dateStr).getDay()];
-  return `${parseInt(m)}月${parseInt(d)}日（${weekday}）`;
+  return `${parseInt(m)}/${parseInt(d)} (${weekday})`;
 }
 function escapeAttr(s){
   return String(s).replace(/"/g, "&quot;");

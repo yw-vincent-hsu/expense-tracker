@@ -596,6 +596,7 @@ body.pie-locked{ overflow: hidden; }
   color:var(--ink);
   font:inherit;
   padding:11px 12px;
+  min-width:0;
 }
 .form-row{ display:grid; grid-template-columns:minmax(0,1fr) minmax(0,1fr); gap:10px; }
 .form-row .form-field{ min-width:0; }
@@ -640,7 +641,7 @@ body.pie-locked{ overflow: hidden; }
   .cal-day-amt{ font-size:0.49rem; }
   .entry-form{ padding-left:14px; padding-right:14px; }
   .entry-form-sheet{ max-height:calc(100dvh - 24px); }
-  .form-row{ grid-template-columns:1fr; gap:0; }
+  .form-row{ grid-template-columns:minmax(0,1fr) minmax(0,1fr); gap:8px; }
 }
 
 ::-webkit-scrollbar{ width:0; height:0; }
@@ -701,7 +702,7 @@ body.pie-locked{ overflow: hidden; }
   <div class="sheet-drag-handle" id="entryDragHandle"><div class="sheet-handle"></div></div>
   <div class="sheet-header">
     <div class="sheet-title">新增記帳</div>
-    <div class="sheet-total" id="entrySyncStatus">寫入 Google 試算表</div>
+    <div class="sheet-total" id="entrySyncStatus"></div>
   </div>
   <form class="entry-form" id="entryForm">
     <div class="form-field">
@@ -713,7 +714,7 @@ body.pie-locked{ overflow: hidden; }
       <input type="hidden" id="entryType" value="支出">
     </div>
     <div class="form-row">
-      <div class="form-field"><label for="entryDate">日期</label><input id="entryDate" type="date" required></div>
+      <div class="form-field"><label for="entryDate">日期</label><input id="entryDate" type="text" inputmode="numeric" autocomplete="bday" placeholder="2026/8/21" pattern="\d{4}/\d{1,2}/\d{1,2}" required></div>
       <div class="form-field"><label for="entryAmount">金額</label><input id="entryAmount" type="number" min="1" step="1" inputmode="decimal" placeholder="0" required></div>
     </div>
     <div class="form-field"><label for="entryCategory">分類</label><select id="entryCategory" required></select></div>
