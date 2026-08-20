@@ -16,14 +16,14 @@ const CONFIG = {
 // a fixed per-category mapping, since whichever categories are biggest this
 // month simply take the first colors in the list.
 const EXPENSE_PALETTE = [
-  "#6A8372", // 老竹
-  "#465D4C", // 御納戶茶
-  "#36563C", // 千歲綠
-  "#516E41", // 青丹
-  "#7BA23F", // 萌黃
-  "#90B44B", // 鶸萌黃
-  "#BEC23F", // 鶸
-  "#DDD23B", // 女郎花
+  "#465D4C", // 御納戸茶
+  "#4F726C", // 沈香茶
+  "#89916B", // 梅幸茶
+  "#B1B479", // 麹塵
+  "#A5A051", // 鶸茶
+  "#74673E", // 路考茶
+  "#897D55", // 利休茶
+  "#B4A582", // 利休白茶
 ];
 const INCOME_PALETTE = [
   "#A35E47", // 柿渋
@@ -48,6 +48,7 @@ let rawRows = [];        // parsed sheet rows
 let currentMonth = null; // "2026-08"
 let currentMode = "支出"; // pie mode: 支出 / 收入
 let currentSort = "date";
+let currentSortDir = "desc"; // "desc" or "asc" — toggled by re-clicking the active sort-btn
 let calSelectedDate = null;
 let pollTimer = null;
 let lastSheetSignature = null; // used to detect real changes silently
@@ -469,17 +470,31 @@ function openCategorySheet(category, rank){
   document.getElementById("sheetTotal").textContent = `${rows.length} 筆 · ${formatMoney(total)}`;
 
   currentSort = "date";
-  document.querySelectorAll(".sort-btn").forEach(b => b.classList.toggle("active", b.dataset.sort === "date"));
+  currentSortDir = "desc";
+  updateSortButtons();
   renderSheetList(rows);
 
   document.getElementById("sheetOverlay").classList.add("open");
   document.getElementById("sheet").classList.add("open");
 }
 
+// Shows which sort is active and its direction (re-clicking the active
+// button flips this instead of doing nothing).
+function updateSortButtons(){
+  const arrow = currentSortDir === "asc" ? "↑" : "↓";
+  document.querySelectorAll(".sort-btn").forEach(btn => {
+    const isActive = btn.dataset.sort === currentSort;
+    btn.classList.toggle("active", isActive);
+    const label = btn.dataset.sort === "date" ? "依日期" : "依金額";
+    btn.textContent = isActive ? `${label} ${arrow}` : label;
+  });
+}
+
 function renderSheetList(rows){
+  const dirMultiplier = currentSortDir === "asc" ? -1 : 1;
   const sorted = [...rows].sort((a, b) => {
-    if (currentSort === "amount") return b.amount - a.amount;
-    return b.date.localeCompare(a.date);
+    const cmp = currentSort === "amount" ? (b.amount - a.amount) : b.date.localeCompare(a.date);
+    return cmp * dirMultiplier;
   });
   document.getElementById("sheetList").innerHTML = sorted.map(r => `
     <div class="entry-row">
@@ -496,8 +511,13 @@ function bindSheet(){
   document.getElementById("sheetOverlay").addEventListener("click", closeSheet);
   document.querySelectorAll(".sort-btn").forEach(btn => {
     btn.addEventListener("click", () => {
-      currentSort = btn.dataset.sort;
-      document.querySelectorAll(".sort-btn").forEach(b => b.classList.toggle("active", b === btn));
+      if (btn.dataset.sort === currentSort) {
+        currentSortDir = currentSortDir === "asc" ? "desc" : "asc";
+      } else {
+        currentSort = btn.dataset.sort;
+        currentSortDir = "desc";
+      }
+      updateSortButtons();
       const category = document.getElementById("sheetTitle").textContent.trim();
       const rows = rawRows.filter(r => r.month === currentMonth && r.type === currentMode && r.category === category);
       renderSheetList(rows);
@@ -669,7 +689,7 @@ function formatCompact(n){
 function formatDateShort(dateStr){
   const [, m, d] = dateStr.split("-");
   const weekday = "日一二三四五六"[new Date(dateStr).getDay()];
-  return `${parseInt(m)}/${parseInt(d)}（${weekday}）`;
+  return `${parseInt(m)}/${parseInt(d)} (${weekday})`;
 }
 function formatDateFull(dateStr){
   const [y, m, d] = dateStr.split("-");
