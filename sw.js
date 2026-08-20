@@ -2,7 +2,7 @@
 // re-installs the service worker (and thus refreshes the cache) when sw.js
 // itself differs byte-for-byte from what's already registered. Leaving this
 // string unchanged means updates silently never reach installed PWAs.
-const CACHE_NAME = "kakeibo-shell-v15";
+const CACHE_NAME = "kakeibo-shell-v16";
 const SHELL_FILES = ["./", "./index.html", "./app.js", "./manifest.json", "./icon.svg"];
 
 self.addEventListener("install", (e) => {

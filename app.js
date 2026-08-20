@@ -292,6 +292,10 @@ function bindEntryForm(){
   const form = document.getElementById("entryForm");
   resetEntryForm();
 
+  document.getElementById("entryDateNative").addEventListener("change", event => {
+    document.getElementById("entryDate").value = formatDisplayDate(event.target.value);
+  });
+
   document.getElementById("addEntryBtn").addEventListener("click", openEntrySheet);
   document.getElementById("cancelEntryBtn").addEventListener("click", closeEntrySheet);
   document.getElementById("entryOverlay").addEventListener("click", closeEntrySheet);
@@ -336,7 +340,9 @@ function resetEntryForm(){
   const form = document.getElementById("entryForm");
   if (form) form.reset();
   const today = new Date();
-  document.getElementById("entryDate").value = `${today.getFullYear()}/${today.getMonth() + 1}/${today.getDate()}`;
+  const isoDate = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, "0")}-${String(today.getDate()).padStart(2, "0")}`;
+  document.getElementById("entryDate").value = formatDisplayDate(isoDate);
+  document.getElementById("entryDateNative").value = isoDate;
   document.getElementById("entryType").value = "支出";
   document.querySelectorAll("[data-entry-type]").forEach(btn => {
     btn.classList.toggle("active-expense", btn.dataset.entryType === "支出");
@@ -360,6 +366,11 @@ function parseDisplayDate(value){
   const date = new Date(year, month - 1, day);
   if (date.getFullYear() !== year || date.getMonth() !== month - 1 || date.getDate() !== day) return "";
   return `${year}-${String(month).padStart(2, "0")}-${String(day).padStart(2, "0")}`;
+}
+
+function formatDisplayDate(value){
+  const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(value);
+  return match ? `${Number(match[1])}/${Number(match[2])}/${Number(match[3])}` : "";
 }
 
 function closeEntrySheet(){
