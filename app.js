@@ -53,6 +53,10 @@ let calSelectedDate = null;
 let pollTimer = null;
 let lastSheetSignature = null; // used to detect real changes silently
 let pendingEntry = null;
+const ENTRY_CATEGORIES = {
+  "支出": ["餐飲", "交通", "日用", "娛樂", "育兒", "醫療", "學習", "其他"],
+  "收入": ["薪資", "投資", "其它"],
+};
 
 const TOKEN_STORAGE_KEY = "kakeibo_token";
 const POLL_INTERVAL_MS = 60 * 1000; // check for sheet updates every 60s while app is open
@@ -109,6 +113,18 @@ function bindTabs(){
       tab.classList.add("active");
       moveIndicator(tab);
       const target = tab.dataset.view;
+      if (target === "pie") {
+        closeSheet();
+        if (!pendingEntry) closeEntrySheet();
+        currentMode = "支出";
+        calSelectedDate = null;
+        window.scrollTo(0, 0);
+        document.documentElement.scrollTop = 0;
+        if (document.getElementById("pieBody")) {
+          updateModeToggleUI();
+          renderPieBody();
+        }
+      }
       document.querySelectorAll(".view").forEach(v => v.classList.remove("active"));
       document.getElementById("view-" + target).classList.add("active");
       // The 圖表 tab is laid out to fit one screen with no scrolling; the
@@ -274,8 +290,7 @@ function stopPolling(){
 // ================= ADD ENTRY =================
 function bindEntryForm(){
   const form = document.getElementById("entryForm");
-  const today = new Date();
-  document.getElementById("entryDate").value = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, "0")}-${String(today.getDate()).padStart(2, "0")}`;
+  resetEntryForm();
 
   document.getElementById("addEntryBtn").addEventListener("click", openEntrySheet);
   document.getElementById("cancelEntryBtn").addEventListener("click", closeEntrySheet);
@@ -287,6 +302,7 @@ function bindEntryForm(){
         typeBtn.classList.toggle("active-expense", typeBtn.dataset.entryType === "支出" && typeBtn === btn);
         typeBtn.classList.toggle("active-income", typeBtn.dataset.entryType === "收入" && typeBtn === btn);
       });
+      updateEntryCategories();
     });
   });
   form.addEventListener("submit", (event) => {
@@ -308,10 +324,30 @@ function bindEntryForm(){
 }
 
 function openEntrySheet(){
+  resetEntryForm();
   document.getElementById("entryError").textContent = "";
   document.getElementById("entrySyncStatus").textContent = accessToken ? "寫入 Google 試算表" : "請先連接 Google 帳號";
   document.getElementById("entryOverlay").classList.add("open");
   document.getElementById("entrySheet").classList.add("open");
+}
+
+function resetEntryForm(){
+  const form = document.getElementById("entryForm");
+  if (form) form.reset();
+  const today = new Date();
+  document.getElementById("entryDate").value = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, "0")}-${String(today.getDate()).padStart(2, "0")}`;
+  document.getElementById("entryType").value = "支出";
+  document.querySelectorAll("[data-entry-type]").forEach(btn => {
+    btn.classList.toggle("active-expense", btn.dataset.entryType === "支出");
+    btn.classList.toggle("active-income", false);
+  });
+  updateEntryCategories();
+}
+
+function updateEntryCategories(){
+  const type = document.getElementById("entryType").value;
+  const select = document.getElementById("entryCategory");
+  select.innerHTML = `<option value="" disabled selected>請選擇分類</option>${ENTRY_CATEGORIES[type].map(category => `<option value="${category}">${category}</option>`).join("")}`;
 }
 
 function closeEntrySheet(){
@@ -357,8 +393,7 @@ async function submitEntry(entry){
     }
     if (!res.ok) throw new Error("HTTP " + res.status);
     closeEntrySheet();
-    document.getElementById("entryForm").reset();
-    document.getElementById("entryDate").value = entry.date;
+    resetEntryForm();
     lastSheetSignature = null;
     await fetchSheetData(true);
   } catch (err) {
@@ -634,6 +669,7 @@ function bindSheet(){
     });
   });
   bindSheetDrag();
+  bindSheetDrag("entrySheet", "entryDragHandle", closeEntrySheet);
 }
 function closeSheet(){
   document.getElementById("sheetOverlay").classList.remove("open");
@@ -643,9 +679,9 @@ function closeSheet(){
 // Lets the user pull the sheet down by its handle to dismiss it, mirroring
 // native iOS bottom-sheet behavior. Pointer Events unify touch and mouse so
 // the same code path works for on-device testing in a desktop browser too.
-function bindSheetDrag(){
-  const sheet = document.getElementById("sheet");
-  const dragHandle = document.getElementById("sheetDragHandle");
+function bindSheetDrag(sheetId = "sheet", handleId = "sheetDragHandle", dismiss = closeSheet){
+  const sheet = document.getElementById(sheetId);
+  const dragHandle = document.getElementById(handleId);
   let startY = 0;
   let dragY = 0;
   let dragging = false;
@@ -670,7 +706,7 @@ function bindSheetDrag(){
     // Dismiss once dragged past a quarter of the sheet's own height (or a
     // flat 120px for very short sheets) — otherwise snap back open.
     if (dragY > sheet.offsetHeight * 0.25 || dragY > 120) {
-      closeSheet();
+      dismiss();
     }
   };
   dragHandle.addEventListener("pointerup", endDrag);
