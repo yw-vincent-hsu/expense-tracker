@@ -1,13 +1,13 @@
 // ============================================================
 // 家計簿 · 個人記帳 PWA
-// 資料源：Google Sheets（OAuth 唯讀存取）
+// 資料源：Google Sheets（OAuth 讀寫存取）
 // ============================================================
 
 const CONFIG = {
   CLIENT_ID: "267653972032-c7cc4oqq2fc96aob25uomgs41mqoej91.apps.googleusercontent.com",
   SPREADSHEET_ID: "1tiSbftHD85lhfrW1b792M217G-CbQ1A0KEdia1rn2Q0",
   RANGE: "A:F",
-  SCOPES: "https://www.googleapis.com/auth/spreadsheets.readonly",
+  SCOPES: "https://www.googleapis.com/auth/spreadsheets",
 };
 
 // Color palettes — assigned dynamically by rank (largest category gets the
@@ -52,6 +52,7 @@ let currentSortDir = "desc"; // "desc" or "asc" — toggled by re-clicking the a
 let calSelectedDate = null;
 let pollTimer = null;
 let lastSheetSignature = null; // used to detect real changes silently
+let pendingEntry = null;
 
 const TOKEN_STORAGE_KEY = "kakeibo_token";
 const POLL_INTERVAL_MS = 60 * 1000; // check for sheet updates every 60s while app is open
@@ -84,6 +85,7 @@ function clearStoredToken(){
 window.onload = () => {
   bindTabs();
   bindSheet();
+  bindEntryForm();
   initGoogleAuth();
   if ("serviceWorker" in navigator) {
     navigator.serviceWorker.register("sw.js").catch(() => {});
@@ -137,8 +139,14 @@ function initGoogleAuth(){
         }
         accessToken = resp.access_token;
         saveToken(resp.access_token, resp.expires_in || 3600);
-        fetchSheetData();
-        startPolling();
+        if (pendingEntry) {
+          const entry = pendingEntry;
+          pendingEntry = null;
+          submitEntry(entry);
+        } else {
+          fetchSheetData();
+          startPolling();
+        }
       },
     });
 
@@ -261,6 +269,107 @@ function startPolling(){
 function stopPolling(){
   if (pollTimer) clearInterval(pollTimer);
   pollTimer = null;
+}
+
+// ================= ADD ENTRY =================
+function bindEntryForm(){
+  const form = document.getElementById("entryForm");
+  const today = new Date();
+  document.getElementById("entryDate").value = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, "0")}-${String(today.getDate()).padStart(2, "0")}`;
+
+  document.getElementById("addEntryBtn").addEventListener("click", openEntrySheet);
+  document.getElementById("cancelEntryBtn").addEventListener("click", closeEntrySheet);
+  document.getElementById("entryOverlay").addEventListener("click", closeEntrySheet);
+  document.querySelectorAll("[data-entry-type]").forEach(btn => {
+    btn.addEventListener("click", () => {
+      document.getElementById("entryType").value = btn.dataset.entryType;
+      document.querySelectorAll("[data-entry-type]").forEach(typeBtn => {
+        typeBtn.classList.toggle("active-expense", typeBtn.dataset.entryType === "支出" && typeBtn === btn);
+        typeBtn.classList.toggle("active-income", typeBtn.dataset.entryType === "收入" && typeBtn === btn);
+      });
+    });
+  });
+  form.addEventListener("submit", (event) => {
+    event.preventDefault();
+    const entry = {
+      date: document.getElementById("entryDate").value,
+      type: document.getElementById("entryType").value,
+      category: document.getElementById("entryCategory").value.trim(),
+      name: document.getElementById("entryName").value.trim(),
+      amount: Number(document.getElementById("entryAmount").value),
+      note: document.getElementById("entryNote").value.trim(),
+    };
+    if (!entry.date || !entry.category || !entry.name || !Number.isFinite(entry.amount) || entry.amount <= 0) {
+      document.getElementById("entryError").textContent = "請完整填寫日期、分類、項目名稱與有效金額";
+      return;
+    }
+    submitEntry(entry);
+  });
+}
+
+function openEntrySheet(){
+  document.getElementById("entryError").textContent = "";
+  document.getElementById("entrySyncStatus").textContent = accessToken ? "寫入 Google 試算表" : "請先連接 Google 帳號";
+  document.getElementById("entryOverlay").classList.add("open");
+  document.getElementById("entrySheet").classList.add("open");
+}
+
+function closeEntrySheet(){
+  if (pendingEntry) return;
+  document.getElementById("entryOverlay").classList.remove("open");
+  document.getElementById("entrySheet").classList.remove("open");
+}
+
+async function submitEntry(entry){
+  const errorEl = document.getElementById("entryError");
+  const saveBtn = document.getElementById("saveEntryBtn");
+  if (!accessToken) {
+    pendingEntry = entry;
+    errorEl.textContent = "請先連接 Google 帳號，授權後會繼續儲存";
+    promptSignIn();
+    return;
+  }
+  saveBtn.disabled = true;
+  saveBtn.textContent = "儲存中…";
+  errorEl.textContent = "";
+  try {
+    const url = `https://sheets.googleapis.com/v4/spreadsheets/${CONFIG.SPREADSHEET_ID}/values/${CONFIG.RANGE}:append?valueInputOption=USER_ENTERED&insertDataOption=INSERT_ROWS`;
+    const res = await fetch(url, {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${accessToken}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({ values: [[entry.date, entry.type, entry.category, entry.name, entry.amount, entry.note]] }),
+    });
+    if (res.status === 401) {
+      clearStoredToken();
+      accessToken = null;
+      pendingEntry = entry;
+      promptSignIn();
+      throw new Error("授權已過期");
+    }
+    if (res.status === 403) {
+      pendingEntry = entry;
+      errorEl.textContent = "需要新增 Google 試算表的寫入權限，請重新授權";
+      tokenClient.requestAccessToken({ prompt: "consent" });
+      return;
+    }
+    if (!res.ok) throw new Error("HTTP " + res.status);
+    closeEntrySheet();
+    document.getElementById("entryForm").reset();
+    document.getElementById("entryDate").value = entry.date;
+    lastSheetSignature = null;
+    await fetchSheetData(true);
+  } catch (err) {
+    if (err.message !== "授權已過期") {
+      console.error(err);
+      errorEl.textContent = "儲存失敗，請確認網路連線後再試一次";
+    }
+  } finally {
+    saveBtn.disabled = false;
+    saveBtn.textContent = "儲存記帳";
+  }
 }
 
 function parseRows(values){

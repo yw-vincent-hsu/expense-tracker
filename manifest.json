@@ -1,7 +1,7 @@
 {
   "name": "家計簿 · 個人記帳",
   "short_name": "家計簿",
-  "description": "讀取 Google Sheet 記帳資料，以圖表與日曆呈現收支狀況",
+  "description": "在 PWA 直接記帳，並以圖表與日曆呈現 Google 試算表收支資料",
   "start_url": ".",
   "display": "standalone",
   "background_color": "#F8F6EE",
