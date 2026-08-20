@@ -118,13 +118,13 @@ function bindTabs(){
         if (!pendingEntry) closeEntrySheet();
         currentMode = "支出";
         calSelectedDate = null;
-        window.scrollTo(0, 0);
-        document.documentElement.scrollTop = 0;
+        resetPageScroll();
         if (document.getElementById("pieBody")) {
           updateModeToggleUI();
           renderPieBody();
         }
       }
+      if (target === "calendar") resetPageScroll();
       document.querySelectorAll(".view").forEach(v => v.classList.remove("active"));
       document.getElementById("view-" + target).classList.add("active");
       // The 圖表 tab is laid out to fit one screen with no scrolling; the
@@ -352,8 +352,26 @@ function updateEntryCategories(){
 
 function closeEntrySheet(){
   if (pendingEntry) return;
+  if (document.activeElement && typeof document.activeElement.blur === "function") {
+    document.activeElement.blur();
+  }
   document.getElementById("entryOverlay").classList.remove("open");
   document.getElementById("entrySheet").classList.remove("open");
+  resetPageScroll();
+}
+
+function resetPageScroll(){
+  const restore = () => {
+    window.scrollTo(0, 0);
+    document.documentElement.scrollTop = 0;
+    document.body.scrollTop = 0;
+  };
+  restore();
+  requestAnimationFrame(() => {
+    restore();
+    requestAnimationFrame(restore);
+  });
+  setTimeout(restore, 250);
 }
 
 async function submitEntry(entry){

@@ -121,7 +121,7 @@ body{
   position:absolute;
   bottom:0;
   height: 2.5px;
-  background: var(--matcha-deep);
+  background: var(--expense-accent);
   transition: transform 0.28s cubic-bezier(.32,.72,0,1), width 0.28s cubic-bezier(.32,.72,0,1);
 }
 .tab{
@@ -179,7 +179,7 @@ body.pie-locked{ overflow: hidden; }
   display:inline-flex;
   align-items:center;
   gap:6px;
-  background: var(--matcha-deep);
+  background: var(--expense-accent);
   color: #fff;
   border:none;
   border-radius: 10px;
@@ -506,10 +506,10 @@ body.pie-locked{ overflow: hidden; }
 .cal-day.empty{ cursor:default; }
 .cal-day.has-data{ background: var(--washi-deep); }
 .cal-day.today .cal-day-num{
-  color: var(--persimmon-deep);
+  color: var(--expense-accent);
 }
 .cal-day.selected{
-  background: var(--matcha-deep);
+  background: var(--expense-accent);
 }
 .cal-day.selected .cal-day-num, .cal-day.selected .cal-day-amt{ color:#fff; }
 .cal-day-num{
@@ -597,7 +597,8 @@ body.pie-locked{ overflow: hidden; }
   font:inherit;
   padding:11px 12px;
 }
-.form-row{ display:grid; grid-template-columns:1fr 1fr; gap:10px; }
+.form-row{ display:grid; grid-template-columns:minmax(0,1fr) minmax(0,1fr); gap:10px; }
+.form-row .form-field{ min-width:0; }
 .form-type-toggle{ display:flex; gap:6px; }
 .form-type-toggle button{
   flex:1;
@@ -639,6 +640,7 @@ body.pie-locked{ overflow: hidden; }
   .cal-day-amt{ font-size:0.49rem; }
   .entry-form{ padding-left:14px; padding-right:14px; }
   .entry-form-sheet{ max-height:calc(100dvh - 24px); }
+  .form-row{ grid-template-columns:1fr; gap:0; }
 }
 
 ::-webkit-scrollbar{ width:0; height:0; }
