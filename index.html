@@ -20,8 +20,8 @@
   --persimmon: #C17A4D;
   --persimmon-deep: #A45F35;
   --persimmon-pale: #F1DCC8;
-  --expense-accent: #6A8372; /* 抹茶竹 — expense-specific text/number/button color */
-  --income-accent: #B47157;  /* 柿茶 — income-specific text/number/button color */
+  --expense-accent: #6A8372; /* 老竹 — expense-specific text/number/button color */
+  --income-accent: #B47157;  /* 唐茶 — income-specific text/number/button color */
   --line: #DDD5C0;
   --card: #FFFEFB;
   --shadow: 0 1px 2px rgba(43,40,32,0.06), 0 4px 16px rgba(43,40,32,0.05);
@@ -167,7 +167,7 @@ body{
   transition: opacity 0.25s ease, transform 0.25s ease;
 }
 #view-pie{ padding-bottom: 58px; }
-/* Locks page scrolling while the 賬表 tab is active — its content is sized
+/* Locks page scrolling while the 圖表 tab is active — its content is sized
    to fit one screen instead, unlike the calendar view which stays scrollable. */
 body.pie-locked{ overflow: hidden; }
 
@@ -676,7 +676,7 @@ body.pie-locked{ overflow: hidden; }
   </div>
   <div class="tabs" id="tabs">
     <div class="tabs-indicator" id="tabsIndicator"></div>
-    <div class="tab active" data-view="pie">賬表</div>
+    <div class="tab active" data-view="pie">圖表</div>
     <div class="tab" data-view="calendar">日曆</div>
   </div>
 </div>
