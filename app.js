@@ -16,19 +16,19 @@ const CONFIG = {
 // a fixed per-category mapping, since whichever categories are biggest this
 // month simply take the first colors in the list.
 const EXPENSE_PALETTE = [
-  "#6A8372", // 老竹
-  "#465D4C", // 御納戸茶
+  "#6A8372", // 抹茶竹
+  "#465D4C", // 御深緑茶
   "#36563C", // 千歳緑
-  "#516E41", // 青丹
-  "#7BA23F", // 萌黃
-  "#90B44B", // 鶸萌黃
-  "#BEC23F", // 鶸
+  "#516E41", // 錆丹
+  "#7BA23F", // 苔黃
+  "#90B44B", // 鴬萌黃
+  "#BEC23F", // 鴬色
   "#DDD23B", // 女郎花
 ];
 const INCOME_PALETTE = [
-  "#B47157", // 唐茶
-  "#E79460", // 洗柿
-  "#FFBA84", // 灑落柿
+  "#B47157", // 柿茶
+  "#E79460", // 檜皮
+  "#FFBA84", // 珊瑚橙
 ];
 
 function paletteFor(type){
@@ -54,8 +54,8 @@ let pollTimer = null;
 let lastSheetSignature = null; // used to detect real changes silently
 let pendingEntry = null;
 const ENTRY_CATEGORIES = {
-  "支出": ["餐飲", "交通", "日用", "娛樂", "育兒", "醫療", "學習", "其他"],
-  "收入": ["薪資", "投資", "其它"],
+  "支出": ["餐飲", "交通", "日用", "娛樂", "服飾", "醫療", "學習", "其他"],
+  "收入": ["薪資", "投資", "獎金"],
 };
 
 const TOKEN_STORAGE_KEY = "kakeibo_token";
@@ -127,7 +127,7 @@ function bindTabs(){
       if (target === "calendar") resetPageScroll();
       document.querySelectorAll(".view").forEach(v => v.classList.remove("active"));
       document.getElementById("view-" + target).classList.add("active");
-      // The 圖表 tab is laid out to fit one screen with no scrolling; the
+      // The 賬表 tab is laid out to fit one screen with no scrolling; the
       // 日曆 tab still needs to scroll for long day-detail lists.
       document.body.classList.toggle("pie-locked", target === "pie");
     });
@@ -139,8 +139,8 @@ function bindTabs(){
 
 // ---------- Google OAuth ----------
 function initGoogleAuth(){
-  renderStatus("pieContent", "loading", "正在準備連線…");
-  renderStatus("calendarContent", "loading", "正在準備連線…");
+  renderStatus("pieContent", "loading", "正在連接連線…");
+  renderStatus("calendarContent", "loading", "正在連接連線…");
 
   const gsiScript = document.createElement("script");
   gsiScript.src = "https://accounts.google.com/gsi/client";
@@ -187,10 +187,10 @@ function promptSignIn(){
 function renderConnectPrompt(){
   const html = `
     <div class="status-msg">
-      <span class="icon">🔒</span>
-      連接你的 Google 帳號<br>以讀取「個人記帳本」試算表
+      <span class="icon">🔗</span>
+      連接你的 Google 帳戶<br>以讀取個人記帳本試算表
       <br>
-      <button class="btn" id="connectBtn">連接 Google 帳號</button>
+      <button class="btn" id="connectBtn">連接 Google 帳戶</button>
     </div>`;
   document.getElementById("pieContent").innerHTML = html;
   document.getElementById("calendarContent").innerHTML = html.replace('id="connectBtn"', 'id="connectBtn2"');
@@ -200,7 +200,7 @@ function renderConnectPrompt(){
 }
 
 function renderStatus(elId, kind, msg, showRetry){
-  const icon = kind === "error" ? "⚠️" : kind === "empty" ? "🗒️" : "◌";
+  const icon = kind === "error" ? "⚠️" : kind === "empty" ? "🗒️" : "⏳";
   document.getElementById(elId).innerHTML = `
     <div class="status-msg">
       <span class="icon">${icon}</span>
@@ -265,8 +265,8 @@ async function fetchSheetData(silent){
   } catch (err) {
     console.error(err);
     if (!silent) {
-      renderStatus("pieContent", "error", "讀取失敗，請確認網路連線或重新授權", true);
-      renderStatus("calendarContent", "error", "讀取失敗，請確認網路連線或重新授權", true);
+      renderStatus("pieContent", "error", "讀取失敗，請確認網路連線後重新授權", true);
+      renderStatus("calendarContent", "error", "讀取失敗，請確認網路連線後重新授權", true);
     }
   }
 }
@@ -402,7 +402,7 @@ async function submitEntry(entry){
   const saveBtn = document.getElementById("saveEntryBtn");
   if (!accessToken) {
     pendingEntry = entry;
-    errorEl.textContent = "請先連接 Google 帳號，授權後會繼續儲存";
+    errorEl.textContent = "請先連接 Google 帳戶，授權後將繼續儲存";
     promptSignIn();
     return;
   }
@@ -854,7 +854,7 @@ function renderDayDetail(dateStr, info){
               <div class="entry-name">${r.name || "（未命名）"}</div>
               <div class="entry-meta">${r.category}${r.note ? " · " + r.note : ""}</div>
             </div>
-            <div class="entry-amount" style="color:${r.type==='支出' ? 'var(--ink)' : 'var(--income-accent)'}">
+            <div class="entry-amount" style="color:var(--ink)">
               ${r.type === "支出" ? "-" : "+"}${formatMoney(r.amount)}
             </div>
           </div>

@@ -20,8 +20,8 @@
   --persimmon: #C17A4D;
   --persimmon-deep: #A45F35;
   --persimmon-pale: #F1DCC8;
-  --expense-accent: #6A8372; /* 老竹 — expense-specific text/number/button color */
-  --income-accent: #B47157;  /* 唐茶 — income-specific text/number/button color */
+  --expense-accent: #6A8372; /* 抹茶竹 — expense-specific text/number/button color */
+  --income-accent: #B47157;  /* 柿茶 — income-specific text/number/button color */
   --line: #DDD5C0;
   --card: #FFFEFB;
   --shadow: 0 1px 2px rgba(43,40,32,0.06), 0 4px 16px rgba(43,40,32,0.05);
@@ -97,19 +97,24 @@ body{
   border-bottom: 2px solid var(--ink-soft);
   transform: rotate(45deg) translateY(-3px);
 }
-.add-entry-btn{
-  width:42px;
-  height:42px;
-  border:1px solid var(--line);
-  border-radius:12px;
-  background:var(--card);
-  color:var(--matcha-deep);
-  font-size:1.55rem;
+/* Floating add-entry button — moved off the app bar into the thumb zone. */
+.fab-add-btn{
+  position:fixed;
+  right:20px;
+  bottom:calc(20px + env(safe-area-inset-bottom));
+  width:58px;
+  height:58px;
+  border:none;
+  border-radius:50%;
+  background:var(--expense-accent);
+  color:#fff;
+  font-size:1.8rem;
   line-height:1;
   cursor:pointer;
-  box-shadow:var(--shadow);
+  box-shadow:0 8px 20px rgba(106,131,114,0.4), 0 2px 6px rgba(43,40,32,0.15);
+  z-index:30;
 }
-.add-entry-btn:active{ transform:scale(0.96); }
+.fab-add-btn:active{ transform:scale(0.96); }
 
 /* ---------- Tabs ---------- */
 .tabs{
@@ -162,7 +167,7 @@ body{
   transition: opacity 0.25s ease, transform 0.25s ease;
 }
 #view-pie{ padding-bottom: 58px; }
-/* Locks page scrolling while the 圖表 tab is active — its content is sized
+/* Locks page scrolling while the 賬表 tab is active — its content is sized
    to fit one screen instead, unlike the calendar view which stays scrollable. */
 body.pie-locked{ overflow: hidden; }
 
@@ -634,7 +639,7 @@ body.pie-locked{ overflow: hidden; }
   .brand{ min-width:0; gap:5px; }
   .brand-mark{ font-size:1rem; }
   .brand-sub{ display:none; }
-  .add-entry-btn{ width:38px; height:38px; }
+  .fab-add-btn{ width:54px; height:54px; right:16px; bottom:calc(16px + env(safe-area-inset-bottom)); }
   .month-select{ margin-left:auto; }
   .month-select select{ max-width:116px; padding-left:9px; padding-right:26px; font-size:0.84rem; }
   .view{ padding:12px 10px 88px; }
@@ -665,14 +670,13 @@ body.pie-locked{ overflow: hidden; }
       <span class="brand-mark">家計簿</span>
       <span class="brand-sub">個人記帳</span>
     </div>
-    <button class="add-entry-btn" id="addEntryBtn" type="button" aria-label="新增記帳" title="新增記帳">+</button>
     <div class="month-select">
       <select id="monthSelect"></select>
     </div>
   </div>
   <div class="tabs" id="tabs">
     <div class="tabs-indicator" id="tabsIndicator"></div>
-    <div class="tab active" data-view="pie">圖表</div>
+    <div class="tab active" data-view="pie">賬表</div>
     <div class="tab" data-view="calendar">日曆</div>
   </div>
 </div>
@@ -688,6 +692,9 @@ body.pie-locked{ overflow: hidden; }
     <div id="calendarContent"></div>
   </div>
 </div>
+
+<!-- Floating add-entry button (moved off the app bar) -->
+<button class="fab-add-btn" id="addEntryBtn" type="button" aria-label="新增記帳" title="新增記帳">+</button>
 
 <!-- Category detail bottom sheet -->
 <div class="sheet-overlay" id="sheetOverlay"></div>
