@@ -6,7 +6,6 @@
 const CONFIG = {
   CLIENT_ID: "267653972032-c7cc4oqq2fc96aob25uomgs41mqoej91.apps.googleusercontent.com",
   SPREADSHEET_ID: "1tiSbftHD85lhfrW1b792M217G-CbQ1A0KEdia1rn2Q0",
-  RANGE: "A:F",
   SCOPES: "https://www.googleapis.com/auth/spreadsheets",
 };
 
@@ -44,7 +43,8 @@ function colorForRank(rank, type){
 
 let tokenClient;
 let accessToken = null;
-let rawRows = [];        // parsed sheet rows
+let rawRows = [];        // parsed sheet rows for currentMonth's tab only
+let availableMonths = []; // sheet tab titles matching YYYY-MM, newest first
 let currentMonth = null; // "2026-08"
 let currentMode = "支出"; // pie mode: 支出 / 收入
 let currentSort = "date";
@@ -53,6 +53,8 @@ let calSelectedDate = null;
 let pollTimer = null;
 let lastSheetSignature = null; // used to detect real changes silently
 let pendingEntry = null;
+const MONTH_TAB_RE = /^\d{4}-\d{2}$/;
+const SHEET_HEADER = ["日期", "類型", "分類", "項目名稱", "金額", "備註"];
 const ENTRY_CATEGORIES = {
   "支出": ["餐飲", "交通", "日用", "娛樂", "育兒", "醫療", "學習", "其他"],
   "收入": ["薪資", "投資", "其它"],
@@ -95,8 +97,8 @@ window.onload = () => {
     navigator.serviceWorker.register("sw.js").catch(() => {});
   }
   document.addEventListener("visibilitychange", () => {
-    if (document.visibilityState === "visible" && accessToken) {
-      fetchSheetData(true); // silent refresh when user comes back to the tab
+    if (document.visibilityState === "visible" && accessToken && currentMonth) {
+      fetchSheetData(currentMonth, true); // silent refresh when user comes back to the tab
     }
   });
 };
@@ -160,7 +162,7 @@ function initGoogleAuth(){
           pendingEntry = null;
           submitEntry(entry);
         } else {
-          fetchSheetData();
+          loadMonths();
           startPolling();
         }
       },
@@ -171,7 +173,7 @@ function initGoogleAuth(){
     const stored = loadStoredToken();
     if (stored) {
       accessToken = stored;
-      fetchSheetData();
+      loadMonths();
       startPolling();
     } else {
       promptSignIn();
@@ -209,16 +211,60 @@ function renderStatus(elId, kind, msg, showRetry){
     </div>`;
 }
 
+// ---------- Fetch sheet tab list (one tab per month, e.g. "2026-09") ----------
+async function fetchSheetMeta(){
+  const url = `https://sheets.googleapis.com/v4/spreadsheets/${CONFIG.SPREADSHEET_ID}?fields=sheets.properties.title`;
+  const res = await fetch(url, {
+    headers: { Authorization: `Bearer ${accessToken}` },
+  });
+  if (res.status === 401) {
+    clearStoredToken();
+    accessToken = null;
+    stopPolling();
+    renderConnectPrompt();
+    return null;
+  }
+  if (!res.ok) throw new Error("HTTP " + res.status);
+  const data = await res.json();
+  const titles = (data.sheets || []).map(s => s.properties.title);
+  return titles.filter(t => MONTH_TAB_RE.test(t)).sort().reverse();
+}
+
+// Loads the tab list, picks currentMonth (preferring what's already selected,
+// otherwise the newest tab), then fetches that month's rows.
+async function loadMonths(preferredMonth){
+  renderStatus("pieContent", "loading", "讀取記帳資料中…");
+  try {
+    const months = await fetchSheetMeta();
+    if (months === null) return; // 401 already handled
+    availableMonths = months;
+    if (availableMonths.length === 0) {
+      renderStatus("pieContent", "empty", "找不到符合 YYYY-MM 命名的分頁");
+      renderStatus("calendarContent", "empty", "找不到符合 YYYY-MM 命名的分頁");
+      return;
+    }
+    currentMonth = (preferredMonth && availableMonths.includes(preferredMonth)) ? preferredMonth : availableMonths[0];
+    renderMonthOptions();
+    lastSheetSignature = null;
+    await fetchSheetData(currentMonth);
+  } catch (err) {
+    console.error(err);
+    renderStatus("pieContent", "error", "讀取失敗，請確認網路連線或重新授權", true);
+    renderStatus("calendarContent", "error", "讀取失敗，請確認網路連線或重新授權", true);
+  }
+}
+
 // ---------- Fetch & Parse Sheet ----------
 // silent=true is used for background polling / visibility-refresh: it never
 // shows a loading spinner and never wipes the screen on failure, so a flaky
 // network blip in the background doesn't disrupt whatever the user is looking at.
-async function fetchSheetData(silent){
+async function fetchSheetData(month, silent){
   if (!silent) {
     renderStatus("pieContent", "loading", "讀取記帳資料中…");
   }
   try {
-    const url = `https://sheets.googleapis.com/v4/spreadsheets/${CONFIG.SPREADSHEET_ID}/values/${CONFIG.RANGE}`;
+    const range = encodeURIComponent(`${month}!A:F`);
+    const url = `https://sheets.googleapis.com/v4/spreadsheets/${CONFIG.SPREADSHEET_ID}/values/${range}`;
     const res = await fetch(url, {
       headers: { Authorization: `Bearer ${accessToken}` },
     });
@@ -248,18 +294,17 @@ async function fetchSheetData(silent){
 
     rawRows = parseRows(values);
     if (rawRows.length === 0) {
-      renderStatus("pieContent", "empty", "目前沒有記帳資料");
-      renderStatus("calendarContent", "empty", "目前沒有記帳資料");
+      renderStatus("pieContent", "empty", "這個月還沒有記帳資料");
+      renderStatus("calendarContent", "empty", "這個月還沒有記帳資料");
       return;
     }
-    setupMonthSelector(currentMonth);
     renderAll();
 
     // if the category detail sheet is open, refresh it too so it doesn't show stale numbers
     const sheetEl = document.getElementById("sheet");
     if (sheetEl.classList.contains("open")) {
       const category = document.getElementById("sheetTitle").textContent.trim();
-      const rows = rawRows.filter(r => r.month === currentMonth && r.type === currentMode && r.category === category);
+      const rows = rawRows.filter(r => r.type === currentMode && r.category === category);
       renderSheetList(rows);
     }
   } catch (err) {
@@ -277,8 +322,8 @@ async function fetchSheetData(silent){
 function startPolling(){
   stopPolling();
   pollTimer = setInterval(() => {
-    if (document.visibilityState === "visible" && accessToken) {
-      fetchSheetData(true);
+    if (document.visibilityState === "visible" && accessToken && currentMonth) {
+      fetchSheetData(currentMonth, true);
     }
   }, POLL_INTERVAL_MS);
 }
@@ -397,6 +442,49 @@ function resetPageScroll(){
   setTimeout(restore, 250);
 }
 
+// Creates a new month tab (e.g. "2026-10") with the standard header row.
+// Used when the user logs an entry for a month that has no tab yet.
+async function createMonthTab(month){
+  const addRes = await fetch(`https://sheets.googleapis.com/v4/spreadsheets/${CONFIG.SPREADSHEET_ID}:batchUpdate`, {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${accessToken}`,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({ requests: [{ addSheet: { properties: { title: month } } }] }),
+  });
+  if (!addRes.ok) throw new Error("HTTP " + addRes.status);
+
+  const headerRange = encodeURIComponent(`${month}!A1:F1`);
+  const headerRes = await fetch(
+    `https://sheets.googleapis.com/v4/spreadsheets/${CONFIG.SPREADSHEET_ID}/values/${headerRange}?valueInputOption=USER_ENTERED`,
+    {
+      method: "PUT",
+      headers: {
+        Authorization: `Bearer ${accessToken}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({ values: [SHEET_HEADER] }),
+    }
+  );
+  if (!headerRes.ok) throw new Error("HTTP " + headerRes.status);
+}
+
+async function appendEntryRow(month, entry){
+  const range = encodeURIComponent(`${month}!A:F`);
+  return fetch(
+    `https://sheets.googleapis.com/v4/spreadsheets/${CONFIG.SPREADSHEET_ID}/values/${range}:append?valueInputOption=USER_ENTERED&insertDataOption=INSERT_ROWS`,
+    {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${accessToken}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({ values: [[entry.date, entry.type, entry.category, entry.name, entry.amount, entry.note]] }),
+    }
+  );
+}
+
 async function submitEntry(entry){
   const errorEl = document.getElementById("entryError");
   const saveBtn = document.getElementById("saveEntryBtn");
@@ -409,16 +497,9 @@ async function submitEntry(entry){
   saveBtn.disabled = true;
   saveBtn.textContent = "儲存中…";
   errorEl.textContent = "";
+  const entryMonth = entry.date.slice(0, 7);
   try {
-    const url = `https://sheets.googleapis.com/v4/spreadsheets/${CONFIG.SPREADSHEET_ID}/values/${CONFIG.RANGE}:append?valueInputOption=USER_ENTERED&insertDataOption=INSERT_ROWS`;
-    const res = await fetch(url, {
-      method: "POST",
-      headers: {
-        Authorization: `Bearer ${accessToken}`,
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({ values: [[entry.date, entry.type, entry.category, entry.name, entry.amount, entry.note]] }),
-    });
+    let res = await appendEntryRow(entryMonth, entry);
     if (res.status === 401) {
       clearStoredToken();
       accessToken = null;
@@ -432,11 +513,17 @@ async function submitEntry(entry){
       tokenClient.requestAccessToken({ prompt: "consent" });
       return;
     }
+    // The target month's tab doesn't exist yet — create it (with header) then retry.
+    if (res.status === 400 && !availableMonths.includes(entryMonth)) {
+      await createMonthTab(entryMonth);
+      res = await appendEntryRow(entryMonth, entry);
+    }
     if (!res.ok) throw new Error("HTTP " + res.status);
     closeEntrySheet();
     resetEntryForm();
-    lastSheetSignature = null;
-    await fetchSheetData(true);
+    // Stay on whatever month the user was viewing; re-fetch the tab list so a
+    // newly auto-created month tab shows up in the selector right away.
+    await loadMonths(currentMonth);
   } catch (err) {
     if (err.message !== "授權已過期") {
       console.error(err);
@@ -482,21 +569,18 @@ function parseRows(values){
 }
 
 // ---------- Month Selector ----------
-// preferredMonth: pass the currently-viewed month (e.g. during a silent
-// background refresh) so polling doesn't yank the user back to the latest
-// month while they're looking at an older one. Pass null on first load to
-// default to the most recent month.
-function setupMonthSelector(preferredMonth){
-  const months = [...new Set(rawRows.map(r => r.month))].sort().reverse();
+// Populated from the spreadsheet's own tab list (availableMonths), not from
+// the currently-loaded rows — each tab IS a month now, so the selector must
+// reflect tabs that exist even before any data (or the currently-fetched
+// month's rows) is loaded.
+function renderMonthOptions(){
   const sel = document.getElementById("monthSelect");
   const isFirstBuild = !sel.dataset.bound;
 
-  sel.innerHTML = months.map(m => {
+  sel.innerHTML = availableMonths.map(m => {
     const [y, mo] = m.split("-");
     return `<option value="${m}">${y}年${parseInt(mo)}月</option>`;
   }).join("");
-
-  currentMonth = (preferredMonth && months.includes(preferredMonth)) ? preferredMonth : months[0];
   sel.value = currentMonth;
 
   if (isFirstBuild) {
@@ -504,7 +588,9 @@ function setupMonthSelector(preferredMonth){
     sel.addEventListener("change", () => {
       currentMonth = sel.value;
       calSelectedDate = null;
-      renderAll();
+      lastSheetSignature = null;
+      rawRows = [];
+      fetchSheetData(currentMonth);
     });
   }
 }
