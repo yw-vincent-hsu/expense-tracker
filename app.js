@@ -859,7 +859,7 @@ function renderCalendarView(){
   const [y, m] = currentMonth.split("-").map(Number);
   const firstDay = new Date(y, m - 1, 1);
   const daysInMonth = new Date(y, m, 0).getDate();
-  const startWeekday = (firstDay.getDay() + 6) % 7; // Monday = 0
+  const startWeekday = firstDay.getDay(); // Sunday = 0
 
   // Local calendar date, not UTC — toISOString() reports UTC, which still
   // reads as "yesterday" in UTC+8 until 08:00 local time and made the
@@ -900,7 +900,7 @@ function renderCalendarView(){
       </div>
     </div>
     <div class="cal-grid-card">
-      <div class="cal-weekdays"><div>一</div><div>二</div><div>三</div><div>四</div><div>五</div><div>六</div><div>日</div></div>
+      <div class="cal-weekdays"><div>日</div><div>一</div><div>二</div><div>三</div><div>四</div><div>五</div><div>六</div></div>
       <div class="cal-days">${cells}</div>
     </div>
     <div id="dayDetail"></div>
