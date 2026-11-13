@@ -432,6 +432,8 @@ body.pie-locked{ overflow: hidden; }
   border-bottom: 1px solid var(--line);
 }
 .entry-row:last-child{ border-bottom:none; }
+.entry-row.editable{ cursor:pointer; -webkit-tap-highlight-color:transparent; }
+.entry-row.editable:active{ background:var(--washi); }
 .entry-main{ flex:1; min-width:0; }
 .entry-name{
   font-size: 0.92rem;
@@ -608,15 +610,27 @@ body.pie-locked{ overflow: hidden; }
   padding:11px 12px;
   min-width:0;
 }
-.date-picker-control{ position:relative; }
+/* overflow:hidden clips the invisible native date input to the visible box —
+   iOS gives date inputs an intrinsic size larger than the field, so without
+   this its tap area spilled over into the 金額 field next to it. */
+.date-picker-control{ position:relative; overflow:hidden; border-radius:10px; }
 .date-picker-control input[type="text"]{ padding-right:42px; }
 .date-picker-control input[type="date"]{
   position:absolute;
   inset:0;
   width:100%;
   height:100%;
+  min-width:0;
+  max-width:100%;
+  margin:0;
+  padding:0;
+  border:0;
+  display:block;
+  -webkit-appearance:none;
+  appearance:none;
   opacity:0;
   cursor:pointer;
+  -webkit-tap-highlight-color:transparent;
 }
 .form-row{ display:grid; grid-template-columns:minmax(0,1fr) minmax(0,1fr); gap:10px; }
 .form-row .form-field{ min-width:0; }
@@ -636,6 +650,8 @@ body.pie-locked{ overflow: hidden; }
 .form-type-toggle button.active-income{ background:var(--income-accent); color:#fff; border-color:var(--income-accent); }
 .form-actions{ display:flex; align-items:center; gap:10px; margin-top:4px; }
 .form-actions .btn{ flex:1; margin-top:0; justify-content:center; }
+.form-actions .btn.danger{ flex:0 0 auto; color:var(--persimmon-deep); border-color:var(--persimmon-pale); }
+.form-actions .btn[hidden]{ display:none; }
 .form-actions .btn:disabled{ opacity:0.6; cursor:wait; }
 .form-error{ color:var(--persimmon-deep); font-size:0.8rem; min-height:1.2em; margin-bottom:8px; }
 .entry-reauth-btn{ width:100%; justify-content:center; margin:0 0 10px; }
@@ -725,7 +741,7 @@ body.pie-locked{ overflow: hidden; }
 <div class="sheet entry-form-sheet" id="entrySheet">
   <div class="sheet-drag-handle" id="entryDragHandle"><div class="sheet-handle"></div></div>
   <div class="sheet-header">
-    <div class="sheet-title">新增記帳</div>
+    <div class="sheet-title" id="entrySheetTitle">新增記帳</div>
     <div class="sheet-total" id="entrySyncStatus"></div>
   </div>
   <form class="entry-form" id="entryForm">
@@ -746,7 +762,7 @@ body.pie-locked{ overflow: hidden; }
     <div class="form-field"><label for="entryNote">備註（選填）</label><input id="entryNote" placeholder="補充說明"></div>
     <div class="form-error" id="entryError" role="alert"></div>
     <button class="btn entry-reauth-btn" id="entryReauthBtn" type="button" hidden>連接 Google 帳號</button>
-    <div class="form-actions"><button class="btn ghost" id="cancelEntryBtn" type="button">取消</button><button class="btn" id="saveEntryBtn" type="submit">儲存記帳</button></div>
+    <div class="form-actions"><button class="btn ghost danger" id="deleteEntryBtn" type="button" hidden>刪除</button><button class="btn ghost" id="cancelEntryBtn" type="button">取消</button><button class="btn" id="saveEntryBtn" type="submit">儲存記帳</button></div>
   </form>
 </div>
 

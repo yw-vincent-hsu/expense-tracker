@@ -52,7 +52,9 @@ let currentSortDir = "desc"; // "desc" or "asc" — toggled by re-clicking the a
 let calSelectedDate = null;
 let pollTimer = null;
 let lastSheetSignature = null; // used to detect real changes silently
-let pendingEntry = null;
+let pendingEntry = null; // entry (or {op:"delete", original}) waiting on re-auth
+let editingRow = null;   // the parsed row being edited in the entry sheet, or null when adding
+let sheetIds = {};       // month tab title -> numeric sheetId (needed to delete rows)
 const MONTH_TAB_RE = /^\d{4}-\d{2}$/;
 const SHEET_HEADER = ["日期", "類型", "分類", "項目名稱", "金額", "備註"];
 const ENTRY_CATEGORIES = {
@@ -166,7 +168,8 @@ function initGoogleAuth(){
         if (pendingEntry) {
           const entry = pendingEntry;
           pendingEntry = null;
-          submitEntry(entry);
+          if (entry.op === "delete") deleteEntry(entry.original);
+          else submitEntry(entry);
         } else {
           loadMonths();
           startPolling();
@@ -219,7 +222,7 @@ function renderStatus(elId, kind, msg, showRetry){
 
 // ---------- Fetch sheet tab list (one tab per month, e.g. "2026-09") ----------
 async function fetchSheetMeta(){
-  const url = `https://sheets.googleapis.com/v4/spreadsheets/${CONFIG.SPREADSHEET_ID}?fields=sheets.properties.title`;
+  const url = `https://sheets.googleapis.com/v4/spreadsheets/${CONFIG.SPREADSHEET_ID}?fields=sheets.properties(title,sheetId)`;
   const res = await fetch(url, {
     headers: { Authorization: `Bearer ${accessToken}` },
   });
@@ -233,6 +236,8 @@ async function fetchSheetMeta(){
   if (!res.ok) throw new Error("HTTP " + res.status);
   const data = await res.json();
   const titles = (data.sheets || []).map(s => s.properties.title);
+  sheetIds = {};
+  (data.sheets || []).forEach(s => { sheetIds[s.properties.title] = s.properties.sheetId; });
   return titles.filter(t => MONTH_TAB_RE.test(t)).sort().reverse();
 }
 
@@ -347,7 +352,12 @@ function bindEntryForm(){
     document.getElementById("entryDate").value = formatDisplayDate(event.target.value);
   });
 
-  document.getElementById("addEntryBtn").addEventListener("click", openEntrySheet);
+  document.getElementById("addEntryBtn").addEventListener("click", () => openEntrySheet());
+  document.getElementById("deleteEntryBtn").addEventListener("click", () => {
+    if (!editingRow) return;
+    if (!confirm(`確定要刪除「${editingRow.name || "（未命名）"}」嗎？此動作無法復原。`)) return;
+    deleteEntry(editingRow);
+  });
   document.getElementById("cancelEntryBtn").addEventListener("click", closeEntrySheet);
   document.getElementById("entryOverlay").addEventListener("click", closeEntrySheet);
   document.getElementById("entryReauthBtn").addEventListener("click", (event) => {
@@ -359,11 +369,7 @@ function bindEntryForm(){
   });
   document.querySelectorAll("[data-entry-type]").forEach(btn => {
     btn.addEventListener("click", () => {
-      document.getElementById("entryType").value = btn.dataset.entryType;
-      document.querySelectorAll("[data-entry-type]").forEach(typeBtn => {
-        typeBtn.classList.toggle("active-expense", typeBtn.dataset.entryType === "支出" && typeBtn === btn);
-        typeBtn.classList.toggle("active-income", typeBtn.dataset.entryType === "收入" && typeBtn === btn);
-      });
+      setEntryType(btn.dataset.entryType);
       updateEntryCategories();
     });
   });
@@ -378,6 +384,7 @@ function bindEntryForm(){
       name: document.getElementById("entryName").value.trim(),
       amount: Number(document.getElementById("entryAmount").value),
       note: document.getElementById("entryNote").value.trim(),
+      original: editingRow,
     };
     if (!entry.date || !entry.category || !entry.name || !Number.isFinite(entry.amount) || entry.amount <= 0) {
       document.getElementById("entryError").textContent = "請填寫正確日期（例如 2026/8/21）、分類、項目名稱與有效金額";
@@ -387,8 +394,28 @@ function bindEntryForm(){
   });
 }
 
-function openEntrySheet(){
+// row = a parsed sheet row to edit; omit to add a new entry.
+function openEntrySheet(row){
   resetEntryForm();
+  editingRow = row || null;
+  if (editingRow) {
+    document.getElementById("entryDate").value = formatDisplayDate(row.date);
+    document.getElementById("entryDateNative").value = row.date;
+    setEntryType(ENTRY_CATEGORIES[row.type] ? row.type : "支出");
+    updateEntryCategories();
+    const select = document.getElementById("entryCategory");
+    // Rows written elsewhere (e.g. Gemini) may use a category outside the preset list.
+    if (![...select.options].some(o => o.value === row.category)) {
+      select.insertAdjacentHTML("beforeend", `<option value="${escapeHtml(row.category)}">${escapeHtml(row.category)}</option>`);
+    }
+    select.value = row.category;
+    document.getElementById("entryName").value = row.name;
+    document.getElementById("entryAmount").value = row.amount;
+    document.getElementById("entryNote").value = row.note;
+  }
+  document.getElementById("entrySheetTitle").textContent = editingRow ? "編輯記帳" : "新增記帳";
+  document.getElementById("deleteEntryBtn").hidden = !editingRow;
+  setEntryBusy(false);
   document.getElementById("entryError").textContent = "";
   document.getElementById("entryOverlay").classList.add("open");
   document.getElementById("entrySheet").classList.add("open");
@@ -401,12 +428,24 @@ function resetEntryForm(){
   const isoDate = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, "0")}-${String(today.getDate()).padStart(2, "0")}`;
   document.getElementById("entryDate").value = formatDisplayDate(isoDate);
   document.getElementById("entryDateNative").value = isoDate;
-  document.getElementById("entryType").value = "支出";
-  document.querySelectorAll("[data-entry-type]").forEach(btn => {
-    btn.classList.toggle("active-expense", btn.dataset.entryType === "支出");
-    btn.classList.toggle("active-income", false);
-  });
+  setEntryType("支出");
   updateEntryCategories();
+}
+
+function setEntryType(type){
+  document.getElementById("entryType").value = type;
+  document.querySelectorAll("[data-entry-type]").forEach(btn => {
+    btn.classList.toggle("active-expense", type === "支出" && btn.dataset.entryType === "支出");
+    btn.classList.toggle("active-income", type === "收入" && btn.dataset.entryType === "收入");
+  });
+}
+
+function setEntryBusy(busy, label){
+  const saveBtn = document.getElementById("saveEntryBtn");
+  const deleteBtn = document.getElementById("deleteEntryBtn");
+  saveBtn.disabled = busy;
+  deleteBtn.disabled = busy;
+  saveBtn.textContent = busy && label ? label : (editingRow ? "儲存變更" : "儲存記帳");
 }
 
 function updateEntryCategories(){
@@ -500,68 +539,146 @@ async function createMonthTab(month){
   if (!headerRes.ok) throw new Error("HTTP " + headerRes.status);
 }
 
-async function appendEntryRow(month, entry){
-  const range = encodeURIComponent(`${month}!A:F`);
-  return fetch(
-    `https://sheets.googleapis.com/v4/spreadsheets/${CONFIG.SPREADSHEET_ID}/values/${range}:append?valueInputOption=USER_ENTERED&insertDataOption=INSERT_ROWS`,
-    {
-      method: "POST",
-      headers: {
-        Authorization: `Bearer ${accessToken}`,
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({ values: [[entry.date, entry.type, entry.category, entry.name, entry.amount, entry.note]] }),
-    }
-  );
+class AuthError extends Error {
+  constructor(status){ super("auth " + status); this.status = status; }
+}
+class StaleRowError extends Error {}
+
+// fetch() against this spreadsheet with the current token; 401/403 throw
+// AuthError so callers can route into the in-sheet re-auth flow.
+async function sheetsRequest(path, options = {}){
+  const res = await fetch(`https://sheets.googleapis.com/v4/spreadsheets/${CONFIG.SPREADSHEET_ID}${path}`, {
+    ...options,
+    headers: { Authorization: `Bearer ${accessToken}`, "Content-Type": "application/json" },
+  });
+  if (res.status === 401 || res.status === 403) throw new AuthError(res.status);
+  return res;
 }
 
-async function submitEntry(entry){
+function entryValues(entry){
+  return [entry.date, entry.type, entry.category, entry.name, entry.amount, entry.note];
+}
+
+async function appendEntryRow(month, entry){
+  const range = encodeURIComponent(`${month}!A:F`);
+  return sheetsRequest(`/values/${range}:append?valueInputOption=USER_ENTERED&insertDataOption=INSERT_ROWS`, {
+    method: "POST",
+    body: JSON.stringify({ values: [entryValues(entry)] }),
+  });
+}
+
+async function appendEntry(entry){
+  const month = entry.date.slice(0, 7);
+  let res = await appendEntryRow(month, entry);
+  // The target month's tab doesn't exist yet — create it (with header) then retry.
+  if (res.status === 400 && !availableMonths.includes(month)) {
+    await createMonthTab(month);
+    res = await appendEntryRow(month, entry);
+  }
+  if (!res.ok) throw new Error("HTTP " + res.status);
+}
+
+// Rows are addressed by their row number, which shifts if someone deletes or
+// reorders rows in the sheet after we loaded it. Re-read the row first and
+// refuse to touch it if it no longer holds what the user tapped on.
+async function assertRowUnchanged(row){
+  const range = encodeURIComponent(`${row.month}!A${row.rowNumber}:F${row.rowNumber}`);
+  const res = await sheetsRequest(`/values/${range}`);
+  if (!res.ok) throw new Error("HTTP " + res.status);
+  const data = await res.json();
+  const current = (data.values && data.values[0]) || [];
+  if (JSON.stringify(current) !== JSON.stringify(row.raw)) throw new StaleRowError();
+}
+
+async function deleteSheetRow(row){
+  const sheetId = sheetIds[row.month];
+  if (sheetId === undefined) throw new StaleRowError();
+  const res = await sheetsRequest(":batchUpdate", {
+    method: "POST",
+    body: JSON.stringify({ requests: [{ deleteDimension: { range: {
+      sheetId, dimension: "ROWS", startIndex: row.rowNumber - 1, endIndex: row.rowNumber,
+    } } }] }),
+  });
+  if (!res.ok) throw new Error("HTTP " + res.status);
+}
+
+async function updateEntry(original, entry){
+  await assertRowUnchanged(original);
+  if (entry.date.slice(0, 7) === original.month) {
+    const range = encodeURIComponent(`${original.month}!A${original.rowNumber}:F${original.rowNumber}`);
+    const res = await sheetsRequest(`/values/${range}?valueInputOption=USER_ENTERED`, {
+      method: "PUT",
+      body: JSON.stringify({ values: [entryValues(entry)] }),
+    });
+    if (!res.ok) throw new Error("HTTP " + res.status);
+  } else {
+    // Moved to another month: it belongs in that month's tab now.
+    await appendEntry(entry);
+    await deleteSheetRow(original);
+  }
+}
+
+function handleEntryAuthError(err, pending){
+  if (err.status === 401) {
+    clearStoredToken();
+    accessToken = null;
+    stopPolling();
+    requestEntryReauth(pending, "授權已過期，請重新連接 Google 帳號，授權後會繼續");
+    promptSignIn();
+  } else {
+    // Button stays visible as a fallback in case the browser blocks the popup.
+    requestEntryReauth(pending, "需要 Google 試算表的寫入權限，請重新授權", "consent");
+    tokenClient.requestAccessToken({ prompt: "consent" });
+  }
+}
+
+// Shared flow for save/delete: run the sheet operation, then close and reload,
+// or route auth/stale-row failures back into the sheet.
+async function runEntryOperation(pending, busyLabel, failMessage, operation){
   const errorEl = document.getElementById("entryError");
-  const saveBtn = document.getElementById("saveEntryBtn");
   if (!accessToken) {
-    requestEntryReauth(entry, "請先連接 Google 帳號，授權後會繼續儲存");
+    requestEntryReauth(pending, "請先連接 Google 帳號，授權後會繼續");
     promptSignIn();
     return;
   }
   hideEntryReauth();
-  saveBtn.disabled = true;
-  saveBtn.textContent = "儲存中…";
+  setEntryBusy(true, busyLabel);
   errorEl.textContent = "";
-  const entryMonth = entry.date.slice(0, 7);
   try {
-    let res = await appendEntryRow(entryMonth, entry);
-    if (res.status === 401) {
-      clearStoredToken();
-      accessToken = null;
-      stopPolling();
-      requestEntryReauth(entry, "授權已過期，請重新連接 Google 帳號，授權後會繼續儲存");
-      promptSignIn();
-      return;
-    }
-    if (res.status === 403) {
-      // Button stays visible as a fallback in case the browser blocks the popup.
-      requestEntryReauth(entry, "需要新增 Google 試算表的寫入權限，請重新授權", "consent");
-      tokenClient.requestAccessToken({ prompt: "consent" });
-      return;
-    }
-    // The target month's tab doesn't exist yet — create it (with header) then retry.
-    if (res.status === 400 && !availableMonths.includes(entryMonth)) {
-      await createMonthTab(entryMonth);
-      res = await appendEntryRow(entryMonth, entry);
-    }
-    if (!res.ok) throw new Error("HTTP " + res.status);
+    await operation();
     closeEntrySheet();
     resetEntryForm();
     // Stay on whatever month the user was viewing; re-fetch the tab list so a
     // newly auto-created month tab shows up in the selector right away.
     await loadMonths(currentMonth);
   } catch (err) {
+    if (err instanceof AuthError) {
+      handleEntryAuthError(err, pending);
+      return;
+    }
     console.error(err);
-    errorEl.textContent = "儲存失敗，請確認網路連線後再試一次";
+    if (err instanceof StaleRowError) {
+      errorEl.textContent = "這筆資料已在別處被修改，請關閉後重新選取";
+      fetchSheetData(currentMonth, true);
+    } else {
+      errorEl.textContent = failMessage;
+    }
   } finally {
-    saveBtn.disabled = false;
-    saveBtn.textContent = "儲存記帳";
+    setEntryBusy(false);
   }
+}
+
+function submitEntry(entry){
+  return runEntryOperation(entry, "儲存中…", "儲存失敗，請確認網路連線後再試一次",
+    () => entry.original ? updateEntry(entry.original, entry) : appendEntry(entry));
+}
+
+function deleteEntry(original){
+  return runEntryOperation({ op: "delete", original }, "刪除中…", "刪除失敗，請確認網路連線後再試一次",
+    async () => {
+      await assertRowUnchanged(original);
+      await deleteSheetRow(original);
+    });
 }
 
 function parseRows(values){
@@ -585,6 +702,8 @@ function parseRows(values){
     const amount = parseFloat(amountRaw) || 0;
     if (amount === 0) continue;
     rows.push({
+      rowNumber: i + 1, // 1-based row in the sheet tab
+      raw: r,           // exact cell values, to detect the row changing under us
       date: dateStr,
       month: dateStr.slice(0, 7),
       type: (r[idx.type] || "").trim(),
@@ -964,7 +1083,7 @@ function renderDayDetail(dateStr, info){
       </div>
       <div class="day-detail-list">
         ${rows.map(r => `
-          <div class="entry-row">
+          <div class="entry-row editable" data-row="${r.rowNumber}">
             <div class="entry-main">
               <div class="entry-name">${escapeHtml(r.name) || "（未命名）"}</div>
               <div class="entry-meta">${escapeHtml(r.category)}${r.note ? " · " + escapeHtml(r.note) : ""}</div>
@@ -978,6 +1097,12 @@ function renderDayDetail(dateStr, info){
     </div>
   `;
   document.getElementById("dayDetail").innerHTML = html;
+  document.querySelectorAll("#dayDetail .entry-row[data-row]").forEach(el => {
+    el.addEventListener("click", () => {
+      const row = rawRows.find(r => r.rowNumber === Number(el.dataset.row));
+      if (row) openEntrySheet(row);
+    });
+  });
 }
 
 // ---------- Formatters ----------
