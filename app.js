@@ -152,7 +152,13 @@ function initGoogleAuth(){
       scope: CONFIG.SCOPES,
       callback: (resp) => {
         if (resp.error) {
-          renderStatus("pieContent", "error", "授權失敗，請重試", true);
+          if (pendingEntry) {
+            // The add-entry sheet is covering the page — report inside it and
+            // keep the re-auth button visible so the user can try again.
+            document.getElementById("entryError").textContent = "授權失敗，請重試";
+          } else {
+            renderStatus("pieContent", "error", "授權失敗，請重試", true);
+          }
           return;
         }
         accessToken = resp.access_token;
@@ -344,6 +350,13 @@ function bindEntryForm(){
   document.getElementById("addEntryBtn").addEventListener("click", openEntrySheet);
   document.getElementById("cancelEntryBtn").addEventListener("click", closeEntrySheet);
   document.getElementById("entryOverlay").addEventListener("click", closeEntrySheet);
+  document.getElementById("entryReauthBtn").addEventListener("click", (event) => {
+    if (!tokenClient) {
+      document.getElementById("entryError").textContent = "Google 登入元件尚未載入，請確認網路連線後再試一次";
+      return;
+    }
+    tokenClient.requestAccessToken({ prompt: event.currentTarget.dataset.prompt || "" });
+  });
   document.querySelectorAll("[data-entry-type]").forEach(btn => {
     btn.addEventListener("click", () => {
       document.getElementById("entryType").value = btn.dataset.entryType;
@@ -418,8 +431,25 @@ function formatDisplayDate(value){
   return match ? `${Number(match[1])}/${Number(match[2])}/${Number(match[3])}` : "";
 }
 
+// Keeps the entry waiting for (re)authorization and offers the sign-in button
+// inside the sheet itself — the page-level connect prompt sits behind the
+// sheet's overlay and can't be reached while the sheet is open.
+function requestEntryReauth(entry, message, prompt = ""){
+  pendingEntry = entry;
+  document.getElementById("entryError").textContent = message;
+  const btn = document.getElementById("entryReauthBtn");
+  btn.dataset.prompt = prompt;
+  btn.hidden = false;
+}
+
+function hideEntryReauth(){
+  document.getElementById("entryReauthBtn").hidden = true;
+}
+
 function closeEntrySheet(){
-  if (pendingEntry) return;
+  // Closing the sheet abandons any entry that was waiting on authorization.
+  pendingEntry = null;
+  hideEntryReauth();
   if (document.activeElement && typeof document.activeElement.blur === "function") {
     document.activeElement.blur();
   }
@@ -489,11 +519,11 @@ async function submitEntry(entry){
   const errorEl = document.getElementById("entryError");
   const saveBtn = document.getElementById("saveEntryBtn");
   if (!accessToken) {
-    pendingEntry = entry;
-    errorEl.textContent = "請先連接 Google 帳號，授權後會繼續儲存";
+    requestEntryReauth(entry, "請先連接 Google 帳號，授權後會繼續儲存");
     promptSignIn();
     return;
   }
+  hideEntryReauth();
   saveBtn.disabled = true;
   saveBtn.textContent = "儲存中…";
   errorEl.textContent = "";
@@ -503,13 +533,14 @@ async function submitEntry(entry){
     if (res.status === 401) {
       clearStoredToken();
       accessToken = null;
-      pendingEntry = entry;
+      stopPolling();
+      requestEntryReauth(entry, "授權已過期，請重新連接 Google 帳號，授權後會繼續儲存");
       promptSignIn();
-      throw new Error("授權已過期");
+      return;
     }
     if (res.status === 403) {
-      pendingEntry = entry;
-      errorEl.textContent = "需要新增 Google 試算表的寫入權限，請重新授權";
+      // Button stays visible as a fallback in case the browser blocks the popup.
+      requestEntryReauth(entry, "需要新增 Google 試算表的寫入權限，請重新授權", "consent");
       tokenClient.requestAccessToken({ prompt: "consent" });
       return;
     }
@@ -525,10 +556,8 @@ async function submitEntry(entry){
     // newly auto-created month tab shows up in the selector right away.
     await loadMonths(currentMonth);
   } catch (err) {
-    if (err.message !== "授權已過期") {
-      console.error(err);
-      errorEl.textContent = "儲存失敗，請確認網路連線後再試一次";
-    }
+    console.error(err);
+    errorEl.textContent = "儲存失敗，請確認網路連線後再試一次";
   } finally {
     saveBtn.disabled = false;
     saveBtn.textContent = "儲存記帳";
@@ -670,10 +699,10 @@ function renderPieBody(){
           ${sortedCats.map(([cat, amt], i) => {
             const pct = ((amt / total) * 100).toFixed(1);
             return `
-            <div class="legend-row" data-cat="${escapeAttr(cat)}" data-rank="${i}">
+            <div class="legend-row" data-cat="${escapeHtml(cat)}" data-rank="${i}">
               <div class="legend-dot" style="background:${colorForRank(i, currentMode)}"></div>
               <div class="legend-label">
-                <div class="legend-name">${cat}</div>
+                <div class="legend-name">${escapeHtml(cat)}</div>
                 <div class="legend-pct">${pct}%</div>
               </div>
               <div class="legend-amount">${formatMoney(amt)}</div>
@@ -737,7 +766,7 @@ function openCategorySheet(category, rank){
   const total = rows.reduce((s, r) => s + r.amount, 0);
 
   document.getElementById("sheetTitle").innerHTML =
-    `<span style="width:11px;height:11px;border-radius:3px;display:inline-block;background:${colorForRank(rank, currentMode)}"></span> ${category}`;
+    `<span style="width:11px;height:11px;border-radius:3px;display:inline-block;background:${colorForRank(rank, currentMode)}"></span> ${escapeHtml(category)}`;
   document.getElementById("sheetTotal").textContent = `${rows.length} 筆 · ${formatMoney(total)}`;
   document.querySelector(".sort-toggle").classList.toggle("income", currentMode === "收入");
 
@@ -771,8 +800,8 @@ function renderSheetList(rows){
   document.getElementById("sheetList").innerHTML = sorted.map(r => `
     <div class="entry-row">
       <div class="entry-main">
-        <div class="entry-name">${r.name || "（未命名）"}</div>
-        <div class="entry-meta">${formatDateShort(r.date)}${r.note ? " · " + r.note : ""}</div>
+        <div class="entry-name">${escapeHtml(r.name) || "（未命名）"}</div>
+        <div class="entry-meta">${formatDateShort(r.date)}${r.note ? " · " + escapeHtml(r.note) : ""}</div>
       </div>
       <div class="entry-amount">${formatMoney(r.amount)}</div>
     </div>
@@ -937,8 +966,8 @@ function renderDayDetail(dateStr, info){
         ${rows.map(r => `
           <div class="entry-row">
             <div class="entry-main">
-              <div class="entry-name">${r.name || "（未命名）"}</div>
-              <div class="entry-meta">${r.category}${r.note ? " · " + r.note : ""}</div>
+              <div class="entry-name">${escapeHtml(r.name) || "（未命名）"}</div>
+              <div class="entry-meta">${escapeHtml(r.category)}${r.note ? " · " + escapeHtml(r.note) : ""}</div>
             </div>
             <div class="entry-amount" style="color:var(--ink)">
               ${r.type === "支出" ? "-" : "+"}${formatMoney(r.amount)}
@@ -969,6 +998,10 @@ function formatDateFull(dateStr){
   const weekday = "日一二三四五六"[new Date(dateStr).getDay()];
   return `${parseInt(m)}/${parseInt(d)} (${weekday})`;
 }
-function escapeAttr(s){
-  return String(s).replace(/"/g, "&quot;");
+// Sheet contents (category, name, note) are user-written text, so they must be
+// escaped before going into innerHTML — both as text and as attribute values.
+function escapeHtml(s){
+  return String(s).replace(/[&<>"']/g, ch => ({
+    "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;",
+  }[ch]));
 }
