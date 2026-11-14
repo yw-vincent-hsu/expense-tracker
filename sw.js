@@ -2,8 +2,11 @@
 // re-installs the service worker (and thus refreshes the cache) when sw.js
 // itself differs byte-for-byte from what's already registered. Leaving this
 // string unchanged means updates silently never reach installed PWAs.
-const CACHE_NAME = "kakeibo-shell-v24";
-const SHELL_FILES = ["./", "./index.html", "./app.js", "./manifest.json", "./icon.svg"];
+const CACHE_NAME = "kakeibo-shell-v25";
+const SHELL_FILES = [
+  "./", "./index.html", "./app.js", "./manifest.json", "./icon.svg",
+  "./icon-192.png", "./icon-512.png", "./icon-maskable-512.png", "./apple-touch-icon.png",
+];
 
 self.addEventListener("install", (e) => {
   e.waitUntil(

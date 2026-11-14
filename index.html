@@ -5,9 +5,10 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
 <title>家計簿 · 個人記帳</title>
 <meta name="theme-color" content="#F8F6EE">
+<meta name="color-scheme" content="light">
 <link rel="manifest" href="manifest.json">
 <link rel="icon" href="icon.svg" type="image/svg+xml">
-<link rel="apple-touch-icon" href="icon.svg">
+<link rel="apple-touch-icon" href="apple-touch-icon.png">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Huninn&display=swap" rel="stylesheet">
@@ -30,6 +31,9 @@
   --card: #FFFEFB;
   --shadow: 0 1px 2px rgba(43,40,32,0.06), 0 4px 16px rgba(43,40,32,0.05);
   --radius: 14px;
+  /* Light-only design: keep form controls, date pickers and selects light
+     even when the phone is in dark mode. */
+  color-scheme: light;
 }
 
 *{box-sizing:border-box; margin:0; padding:0;}
@@ -121,7 +125,9 @@ body{
   box-shadow:0 8px 20px rgba(106,131,114,0.4), 0 2px 6px rgba(43,40,32,0.15);
   z-index:30;
 }
-.fab-add-btn:active{ transform:scale(0.96); }
+@media (prefers-reduced-motion: no-preference){
+  .fab-add-btn:active{ transform:scale(0.96); }
+}
 
 /* ---------- Tabs ---------- */
 .tabs{
@@ -134,7 +140,11 @@ body{
   bottom:0;
   height: 2.5px;
   background: var(--expense-accent);
-  transition: transform 0.28s cubic-bezier(.32,.72,0,1), width 0.28s cubic-bezier(.32,.72,0,1);
+}
+@media (prefers-reduced-motion: no-preference){
+  .tabs-indicator{
+    transition: transform 0.28s cubic-bezier(.32,.72,0,1), width 0.28s cubic-bezier(.32,.72,0,1);
+  }
 }
 .tab{
   position:relative;
@@ -161,17 +171,20 @@ body{
   width: 100%;
   margin: 0 auto;
   opacity: 0;
-  transform: translateY(8px);
   visibility: hidden;
   pointer-events: none;
   transition: opacity 0.25s ease, transform 0.25s ease, visibility 0s linear 0.25s;
 }
 .view.active{
   opacity: 1;
-  transform: translateY(0);
   visibility: visible;
   pointer-events: auto;
   transition: opacity 0.25s ease, transform 0.25s ease;
+}
+/* The small upward drift is motion; with reduced motion views only fade. */
+@media (prefers-reduced-motion: no-preference){
+  .view{ transform: translateY(8px); }
+  .view.active{ transform: translateY(0); }
 }
 #view-pie{ padding-bottom: 58px; }
 /* Locks page scrolling while the 圖表 tab is active — its content is sized
@@ -202,7 +215,9 @@ body.pie-locked{ overflow: hidden; }
   cursor:pointer;
   margin-top: 14px;
 }
-.btn:active{ transform: scale(0.98); }
+@media (prefers-reduced-motion: no-preference){
+  .btn:active{ transform: scale(0.98); }
+}
 .btn.ghost{
   background: transparent;
   border: 1px solid var(--line);
@@ -225,8 +240,10 @@ body.pie-locked{ overflow: hidden; }
   background: var(--card);
   border-radius: 9px;
   box-shadow: var(--shadow);
-  transition: transform 0.28s cubic-bezier(.32,.72,0,1);
   z-index:0;
+}
+@media (prefers-reduced-motion: no-preference){
+  .mode-toggle-indicator{ transition: transform 0.28s cubic-bezier(.32,.72,0,1); }
 }
 .mode-toggle-indicator.income{
   transform: translateX(100%);
@@ -340,32 +357,71 @@ body.pie-locked{ overflow: hidden; }
   opacity: 0.5;
 }
 
-/* ---------- Category Detail Sheet ---------- */
-.sheet-overlay{
-  position: fixed;
-  inset:0;
-  background: rgba(43,40,32,0.35);
-  z-index: 40;
-  opacity:0;
-  pointer-events:none;
-  transition: opacity 0.2s;
-}
-.sheet-overlay.open{ opacity:1; pointer-events:auto; }
+/* ---------- Bottom sheets (native modal <dialog>) ----------
+   showModal() gives focus containment, an inert page behind, Esc and the
+   Android back gesture for free. The slide is a top-layer transition:
+   `display` + `overlay` with allow-discrete keep it in the top layer while
+   it slides out; browsers without that (Safari) get the data-closing
+   fallback in app.js, which runs the same exit before calling close(). */
 .sheet{
+  /* Reset the UA dialog box (centred, padded, bordered, size-capped). */
   position: fixed;
-  left:0; right:0; bottom:0;
+  inset: auto 0 0 0;
+  margin: 0;
+  width: 100%;
+  max-width: 100%;
+  border: 0;
+  padding: 0 0 env(safe-area-inset-bottom);
+  color: var(--ink);
   background: var(--washi);
   border-radius: 20px 20px 0 0;
-  z-index: 41;
   max-height: 82vh;
   min-height: 60vh;
-  display:flex;
-  flex-direction:column;
-  transform: translateY(100%);
-  transition: transform 0.28s cubic-bezier(.32,.72,0,1);
-  padding-bottom: env(safe-area-inset-bottom);
+  overflow: hidden;
+  /* Scroll gestures inside the sheet never chain to the page behind. */
+  overscroll-behavior: contain;
+  opacity: 0;
+  transition-property: opacity, transform, display, overlay;
+  transition-duration: 0.28s;
+  transition-timing-function: cubic-bezier(.32,.72,0,1);
+  transition-behavior: allow-discrete;
 }
-.sheet.open{ transform: translateY(0); }
+/* Only an open dialog gets a display value — setting it unconditionally
+   would override the closed state. */
+.sheet[open]{
+  display: flex;
+  flex-direction: column;
+}
+.sheet[open]:where(:not([data-closing])){ opacity: 1; }
+@starting-style{
+  .sheet[open]:where(:not([data-closing])){ opacity: 0; }
+}
+/* The slide itself is motion, so it only runs without a reduced-motion
+   preference; with one, the sheet just fades. */
+@media (prefers-reduced-motion: no-preference){
+  .sheet{ transform: translateY(100%); }
+  .sheet[open]:where(:not([data-closing])){ transform: translateY(0); }
+  @starting-style{
+    .sheet[open]:where(:not([data-closing])){ transform: translateY(100%); }
+  }
+}
+@media (prefers-reduced-motion: reduce){
+  .sheet{ transition-duration: 0.15s; }
+}
+.sheet::backdrop{
+  background-color: rgba(43,40,32,0);
+  /* ::backdrop is not a scroll container by default; making it one lets
+     overscroll-behavior stop swipes on the dimmed area scrolling the page. */
+  overflow: hidden;
+  overscroll-behavior: contain;
+  transition-property: background-color, display, overlay;
+  transition-duration: 0.2s;
+  transition-behavior: allow-discrete;
+}
+.sheet[open]:where(:not([data-closing]))::backdrop{ background-color: rgba(43,40,32,0.35); }
+@starting-style{
+  .sheet[open]:where(:not([data-closing]))::backdrop{ background-color: rgba(43,40,32,0); }
+}
 .sheet-drag-handle{
   display:flex;
   justify-content:center;
@@ -585,9 +641,7 @@ body.pie-locked{ overflow: hidden; }
 .entry-form-sheet{
   min-height:auto;
   max-height:92vh;
-  transform:translateY(100%);
 }
-.entry-form-sheet.open{ transform:translateY(0); }
 .entry-form{
   overflow-y:auto;
   padding:0 20px 24px;
@@ -720,8 +774,7 @@ body.pie-locked{ overflow: hidden; }
 <button class="fab-add-btn" id="addEntryBtn" type="button" aria-label="新增記帳" title="新增記帳">+</button>
 
 <!-- Category detail bottom sheet -->
-<div class="sheet-overlay" id="sheetOverlay"></div>
-<div class="sheet" id="sheet">
+<dialog class="sheet" id="sheet" aria-labelledby="sheetTitle">
   <div class="sheet-drag-handle" id="sheetDragHandle">
     <div class="sheet-handle"></div>
   </div>
@@ -734,11 +787,10 @@ body.pie-locked{ overflow: hidden; }
     <div class="sort-btn" data-sort="amount">依金額</div>
   </div>
   <div class="sheet-list" id="sheetList"></div>
-</div>
+</dialog>
 
 <!-- Add entry bottom sheet -->
-<div class="sheet-overlay" id="entryOverlay"></div>
-<div class="sheet entry-form-sheet" id="entrySheet">
+<dialog class="sheet entry-form-sheet" id="entrySheet" aria-labelledby="entrySheetTitle">
   <div class="sheet-drag-handle" id="entryDragHandle"><div class="sheet-handle"></div></div>
   <div class="sheet-header">
     <div class="sheet-title" id="entrySheetTitle">新增記帳</div>
@@ -755,7 +807,7 @@ body.pie-locked{ overflow: hidden; }
     </div>
     <div class="form-row">
       <div class="form-field"><label for="entryDate">日期</label><div class="date-picker-control"><input id="entryDate" type="text" placeholder="2026/8/21" readonly required><input id="entryDateNative" type="date" tabindex="-1" aria-label="選擇日期"></div></div>
-      <div class="form-field"><label for="entryAmount">金額</label><input id="entryAmount" type="number" min="1" step="1" inputmode="decimal" placeholder="0" required></div>
+      <div class="form-field"><label for="entryAmount">金額</label><input id="entryAmount" type="number" min="1" step="1" inputmode="numeric" placeholder="0" required></div>
     </div>
     <div class="form-field"><label for="entryCategory">分類</label><select id="entryCategory" required></select></div>
     <div class="form-field"><label for="entryName">項目名稱</label><input id="entryName" placeholder="例如：午餐" required></div>
@@ -764,7 +816,7 @@ body.pie-locked{ overflow: hidden; }
     <button class="btn entry-reauth-btn" id="entryReauthBtn" type="button" hidden>連接 Google 帳號</button>
     <div class="form-actions"><button class="btn ghost danger" id="deleteEntryBtn" type="button" hidden>刪除</button><button class="btn ghost" id="cancelEntryBtn" type="button">取消</button><button class="btn" id="saveEntryBtn" type="submit">儲存記帳</button></div>
   </form>
-</div>
+</dialog>
 
 <script src="app.js"></script>
 </body>

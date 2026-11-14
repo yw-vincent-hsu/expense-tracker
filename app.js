@@ -313,7 +313,7 @@ async function fetchSheetData(month, silent){
 
     // if the category detail sheet is open, refresh it too so it doesn't show stale numbers
     const sheetEl = document.getElementById("sheet");
-    if (sheetEl.classList.contains("open")) {
+    if (sheetEl.open) {
       const category = document.getElementById("sheetTitle").textContent.trim();
       const rows = rawRows.filter(r => r.type === currentMode && r.category === category);
       renderSheetList(rows);
@@ -359,7 +359,6 @@ function bindEntryForm(){
     deleteEntry(editingRow);
   });
   document.getElementById("cancelEntryBtn").addEventListener("click", closeEntrySheet);
-  document.getElementById("entryOverlay").addEventListener("click", closeEntrySheet);
   document.getElementById("entryReauthBtn").addEventListener("click", (event) => {
     if (!tokenClient) {
       document.getElementById("entryError").textContent = "Google 登入元件尚未載入，請確認網路連線後再試一次";
@@ -417,8 +416,7 @@ function openEntrySheet(row){
   document.getElementById("deleteEntryBtn").hidden = !editingRow;
   setEntryBusy(false);
   document.getElementById("entryError").textContent = "";
-  document.getElementById("entryOverlay").classList.add("open");
-  document.getElementById("entrySheet").classList.add("open");
+  openSheetDialog(document.getElementById("entrySheet"));
 }
 
 function resetEntryForm(){
@@ -486,14 +484,20 @@ function hideEntryReauth(){
 }
 
 function closeEntrySheet(){
-  // Closing the sheet abandons any entry that was waiting on authorization.
-  pendingEntry = null;
-  hideEntryReauth();
+  // Drop the on-screen keyboard right away instead of after the slide-out.
   if (document.activeElement && typeof document.activeElement.blur === "function") {
     document.activeElement.blur();
   }
-  document.getElementById("entryOverlay").classList.remove("open");
-  document.getElementById("entrySheet").classList.remove("open");
+  closeSheetDialog(document.getElementById("entrySheet"));
+}
+
+// Runs on the dialog's `close` event, so it also covers closes the browser
+// does on its own (e.g. a repeated Android back gesture that can't be
+// intercepted), not just the ones this file starts.
+function onEntrySheetClosed(){
+  // Closing the sheet abandons any entry that was waiting on authorization.
+  pendingEntry = null;
+  hideEntryReauth();
   resetPageScroll();
 }
 
@@ -894,8 +898,7 @@ function openCategorySheet(category, rank){
   updateSortButtons();
   renderSheetList(rows);
 
-  document.getElementById("sheetOverlay").classList.add("open");
-  document.getElementById("sheet").classList.add("open");
+  openSheetDialog(document.getElementById("sheet"));
 }
 
 // Shows which sort is active and its direction (re-clicking the active
@@ -928,7 +931,8 @@ function renderSheetList(rows){
 }
 
 function bindSheet(){
-  document.getElementById("sheetOverlay").addEventListener("click", closeSheet);
+  bindSheetDialog(document.getElementById("sheet"));
+  bindSheetDialog(document.getElementById("entrySheet"), onEntrySheetClosed);
   document.querySelectorAll(".sort-btn").forEach(btn => {
     btn.addEventListener("click", () => {
       if (btn.dataset.sort === currentSort) {
@@ -947,8 +951,90 @@ function bindSheet(){
   bindSheetDrag("entrySheet", "entryDragHandle", closeEntrySheet);
 }
 function closeSheet(){
-  document.getElementById("sheetOverlay").classList.remove("open");
-  document.getElementById("sheet").classList.remove("open");
+  closeSheetDialog(document.getElementById("sheet"));
+}
+
+// ---------- Bottom-sheet <dialog> helpers ----------
+// Both sheets are modal <dialog>s. These helpers give every way of closing
+// one (Cancel, tapping the dimmed area, Esc / Android back, dragging down)
+// the same slide-out instead of an instant disappearance.
+
+let supportsDisplayTransition;
+// Firefox parses `transition-behavior: allow-discrete` without actually
+// transitioning `display`, so probe the real behavior instead of trusting
+// CSS.supports().
+function canTransitionDisplay(){
+  if (supportsDisplayTransition !== undefined) return supportsDisplayTransition;
+  if (!window.CSS?.supports?.("transition-behavior", "allow-discrete") || !document.body) return false;
+  const probe = document.createElement("div");
+  probe.style.cssText = "transition: display 1s allow-discrete !important; display: block;";
+  document.body.appendChild(probe);
+  getComputedStyle(probe).display;
+  probe.style.display = "none";
+  supportsDisplayTransition = getComputedStyle(probe).display === "block";
+  probe.remove();
+  return supportsDisplayTransition;
+}
+// Chrome can keep a closing dialog in the top layer while it animates out
+// (`overlay` + discrete `display`). Safari can't yet, so there the exit runs
+// first via [data-closing] and close() is called once it has finished.
+function supportsTopLayerExit(){
+  return Boolean(window.CSS?.supports?.("overlay", "auto")) && canTransitionDisplay();
+}
+
+function openSheetDialog(dialog){
+  // Re-opened during a fallback slide-out: cancel the pending close instead.
+  dialog.removeAttribute("data-closing");
+  if (!dialog.open) dialog.showModal();
+}
+
+async function closeSheetDialog(dialog){
+  if (!dialog.open || dialog.hasAttribute("data-closing")) return;
+  if (!supportsTopLayerExit()) {
+    dialog.setAttribute("data-closing", "");
+    const animations = dialog.getAnimations({ subtree: true });
+    if (animations.length > 0) {
+      await Promise.race([
+        Promise.allSettled(animations.map(a => a.finished)),
+        new Promise(r => setTimeout(r, 2000)),
+      ]);
+    }
+    // Re-opened while sliding out — leave it open.
+    if (!dialog.hasAttribute("data-closing")) return;
+    dialog.removeAttribute("data-closing");
+  }
+  dialog.close();
+}
+
+function bindSheetDialog(dialog, onClosed){
+  // Esc and the Android back gesture fire `cancel`; animate instead of the
+  // instant native close. Repeated presses without a tap in between may not
+  // be cancelable — the browser then closes it directly, and `close` below
+  // still runs the cleanup.
+  dialog.addEventListener("cancel", (event) => {
+    if (!event.cancelable) return;
+    event.preventDefault();
+    closeSheetDialog(dialog);
+  });
+
+  // Tapping the dimmed area closes the sheet. Taps on ::backdrop are
+  // dispatched to the <dialog> itself, so compare the pointer position with
+  // the sheet's box. Both press and release must be outside, so a scroll or
+  // drag that merely ends on the backdrop doesn't dismiss it. (Done by hand
+  // rather than closedby="any", which Safari lacks and which would skip the
+  // slide-out.)
+  const isOutside = (event) => {
+    const r = dialog.getBoundingClientRect();
+    return event.clientX < r.left || event.clientX > r.right || event.clientY < r.top || event.clientY > r.bottom;
+  };
+  let pressedOutside = false;
+  dialog.addEventListener("pointerdown", (event) => { pressedOutside = isOutside(event); });
+  dialog.addEventListener("pointerup", (event) => {
+    if (pressedOutside && isOutside(event)) closeSheetDialog(dialog);
+    pressedOutside = false;
+  });
+
+  if (onClosed) dialog.addEventListener("close", onClosed);
 }
 
 // Lets the user pull the sheet down by its handle to dismiss it, mirroring
